@@ -3,14 +3,16 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
+
+mod craber;
+use craber::*;
+
+mod food;
+use food::*;
+
+mod common;
 use bevy_pancam::{PanCam, PanCamPlugin};
-use rand::Rng;
-
-#[derive(Resource)]
-struct FoodSpawnTimer(Timer);
-
-#[derive(Resource)]
-struct CraberSpawnTimer(Timer);
+use common::*;
 
 const ENERGY_CONSUMPTION_RATE: f32 = 1.0;
 const SOME_COLLISION_THRESHOLD: f32 = 10.0;
@@ -86,105 +88,6 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
     }
 }
 
-#[derive(Component)]
-enum SelectableEntity {
-    Craber,
-    Food,
-}
-
-#[derive(Default, Resource)]
-struct SelectedEntity {
-    entity: Option<Entity>,
-    health: f32,
-    energy: f32,
-}
-
-#[derive(Component)]
-struct Craber {
-    max_energy: f32,
-    max_health: f32,
-    energy: f32,
-    health: f32,
-}
-
-#[derive(Component)]
-struct Food {
-    energy_value: f32,
-}
-
-#[derive(Component)]
-struct Velocity(Vec2);
-
-fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<FoodSpawnTimer>) {
-    if timer.0.tick(time.delta()).just_finished() {
-        let mut rng = rand::thread_rng();
-        let position = Vec2::new(rng.gen_range(-200.0..200.0), rng.gen_range(-200.0..200.0));
-        let energy_value = rng.gen_range(5.0..15.0);
-
-        commands
-            .spawn(SpriteBundle {
-                sprite: Sprite {
-                    color: Color::BLUE,
-                    custom_size: Some(Vec2::new(10.0, 10.0)),
-                    ..Default::default()
-                },
-                transform: Transform::from_translation(position.extend(0.0)),
-                ..Default::default()
-            })
-            .insert(Food { energy_value })
-            .insert(SelectableEntity::Food);
-    }
-}
-
-fn craber_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<CraberSpawnTimer>) {
-    if timer.0.tick(time.delta()).just_finished() {
-        let mut rng = rand::thread_rng();
-        let position = Vec2::new(rng.gen_range(-200.0..200.0), rng.gen_range(-200.0..200.0));
-        let velocity = Vec2::new(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-
-        commands
-            .spawn(SpriteBundle {
-                sprite: Sprite {
-                    color: Color::RED, // Different color to distinguish from food
-                    custom_size: Some(Vec2::new(10.0, 10.0)),
-                    ..Default::default()
-                },
-                transform: Transform::from_translation(position.extend(0.0)),
-                ..Default::default()
-            })
-            .insert(Craber {
-                max_energy: 100.0,
-                max_health: 100.0,
-                energy: 100.0,
-                health: 100.0,
-            })
-            .insert(SelectableEntity::Craber)
-            .insert(Velocity(velocity));
-    }
-}
-
-fn craber_movement(mut query: Query<(&mut Transform, &Velocity), With<Craber>>, time: Res<Time>) {
-    let boundary = 200.0; // Define the boundary of your 2D space
-    for (mut transform, velocity) in query.iter_mut() {
-        transform.translation += (velocity.0 * time.delta_seconds()).extend(0.0);
-
-        // Wrap around logic
-        let translation = &mut transform.translation;
-        translation.x = wrap_around(translation.x, boundary);
-        translation.y = wrap_around(translation.y, boundary);
-    }
-}
-
-fn wrap_around(coord: f32, boundary: f32) -> f32 {
-    if coord > boundary {
-        -boundary
-    } else if coord < -boundary {
-        boundary
-    } else {
-        coord
-    }
-}
-
 fn handle_collisions(
     mut commands: Commands,
     mut craber_query: Query<(Entity, &mut Craber, &Transform)>,
@@ -192,7 +95,7 @@ fn handle_collisions(
 ) {
     for (craber_entity, mut craber, craber_transform) in craber_query.iter_mut() {
         for (food_entity, food, food_transform) in food_query.iter() {
-            if collides(craber_transform, food_transform) {
+            if collides(craber_transform, food_transform, SOME_COLLISION_THRESHOLD) {
                 craber.energy += food.energy_value;
                 commands.entity(food_entity).despawn(); // Remove food on collision
             }
@@ -212,25 +115,6 @@ fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: Res<
     }
 }
 
-fn energy_to_color(energy: f32, max_energy: f32) -> Color {
-    let energy_ratio = energy / max_energy;
-    Color::rgb(1.0 - energy_ratio, energy_ratio, 0.0) // Red to green transition
-}
-
-fn update_craber_color(mut query: Query<(&Craber, &mut Sprite)>) {
-    for (craber, mut sprite) in query.iter_mut() {
-        sprite.color = energy_to_color(craber.energy, craber.max_energy);
-    }
-}
-
-fn despawn_dead_crabers(mut commands: Commands, query: Query<(Entity, &Craber)>) {
-    for (entity, craber) in query.iter() {
-        if craber.health <= 0.0 {
-            commands.entity(entity).despawn();
-        }
-    }
-}
-
 fn entity_selection(
     mouse_button_input: Res<Input<MouseButton>>,
     windows: Query<&Window>,
@@ -246,7 +130,11 @@ fn entity_selection(
             let new_position = window_to_world(position, &window, camera, camera_projection);
             for (entity, transform, selectable_type) in query.iter() {
                 println!("Entity {:?} at {:?}", entity, transform);
-                if collides(transform, &Transform::from_translation(new_position)) {
+                if collides(
+                    transform,
+                    &Transform::from_translation(new_position),
+                    SOME_COLLISION_THRESHOLD,
+                ) {
                     selected.entity = Some(entity);
                     match selectable_type {
                         SelectableEntity::Craber => {
@@ -299,11 +187,4 @@ fn update_selected_entity_info(
             selected.energy = food.energy_value; // Set energy to the value of the food
         }
     }
-}
-
-fn collides(a: &Transform, b: &Transform) -> bool {
-    // Simple AABB collision check
-    // Adjust the logic based on your entity's size and collision requirements
-    let distance = a.translation.truncate() - b.translation.truncate();
-    distance.length() < SOME_COLLISION_THRESHOLD
 }
