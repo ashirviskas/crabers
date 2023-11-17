@@ -3,7 +3,7 @@ use rand::Rng;
 
 use crate::common::*;
 
-const ENERGY_CONSUMPTION_RATE: f32 = 1.0;
+const ENERGY_CONSUMPTION_RATE: f32 = 0.1;
 
 #[derive(Component)]
 pub struct Craber {

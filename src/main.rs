@@ -14,9 +14,10 @@ mod common;
 use bevy_pancam::{PanCam, PanCamPlugin};
 use common::*;
 
-const SOME_COLLISION_THRESHOLD: f32 = 5.0;
+const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.01;
-const CRABER_SPAWN_RATE: f32 = 0.01;
+const CRABER_SPAWN_RATE: f32 = 0.001;
+const QUAD_TREE_CAPACITY: usize = 8;
 
 fn main() {
     App::new()
@@ -34,10 +35,12 @@ fn main() {
         .add_systems(Update, craber_spawner)
         .add_systems(Update, craber_movement)
         .add_systems(Update, handle_collisions)
+        .add_systems(Update, quad_tree_update)
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
+        .add_systems(Update, draw_quadtree_debug)
         .run();
 }
 
@@ -65,7 +68,7 @@ fn setup(mut commands: Commands) {
         TimerMode::Repeating,
     )));
 
-    commands.insert_resource(Quadtree::new(boundary, 4));
+    commands.insert_resource(Quadtree::new(boundary, QUAD_TREE_CAPACITY));
 }
 
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -102,15 +105,15 @@ fn handle_collisions(
     mut craber_query: Query<(Entity, &EntityType, &mut Craber, &Transform)>,
     food_query: Query<(Entity, &EntityType, &Food, &Transform)>,
 ) {
-    quadtree.clear();
-    for (entity, _, _, transform) in craber_query.iter_mut() {
-        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
-        quadtree.insert(quad_tree_entity);
-    }
-    for (entity, _, _, transform) in food_query.iter() {
-        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
-        quadtree.insert(quad_tree_entity);
-    }
+    // quadtree.clear();
+    // for (entity, _, _, transform) in craber_query.iter_mut() {
+    //     let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
+    //     quadtree.insert(quad_tree_entity);
+    // }
+    // for (entity, _, _, transform) in food_query.iter() {
+    //     let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
+    //     quadtree.insert(quad_tree_entity);
+    // }
 
     // Use Quadtree for collision detection
     // let mut found = Vec::new();
@@ -123,7 +126,6 @@ fn handle_collisions(
         };
         let found = quadtree.query(&search_area);
         // quadtree.query(&search_area);
-
         for point in found.into_iter() {
             if point.entity != entity {
                 if let Ok(food) = food_query.get(point.entity) {
@@ -209,4 +211,28 @@ fn update_selected_entity_info(
             selected.energy = food.energy_value; // Set energy to the value of the food
         }
     }
+}
+
+fn quad_tree_update(
+    mut commands: Commands,
+    mut quadtree: ResMut<Quadtree>,
+    mut craber_query: Query<(Entity, &EntityType, &mut Craber, &Transform)>,
+    food_query: Query<(Entity, &EntityType, &Food, &Transform)>,
+) {
+    quadtree.clear();
+    for (entity, _, _, transform) in craber_query.iter_mut() {
+        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
+        quadtree.insert(quad_tree_entity);
+    }
+    for (entity, _, _, transform) in food_query.iter() {
+        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
+        quadtree.insert(quad_tree_entity);
+    }
+}
+
+fn draw_quadtree_debug(mut commands: Commands, quadtree: Res<Quadtree>, debug_rectangles: Query<Entity, With<DebugRectangle>>) {
+    for entity in debug_rectangles.iter() {
+        commands.entity(entity).despawn();
+    }
+    quadtree.draw(&mut commands);
 }

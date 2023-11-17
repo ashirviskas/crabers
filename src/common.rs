@@ -8,6 +8,8 @@ pub enum SelectableEntity {
     Food,
 }
 
+#[derive(Component)]
+pub struct DebugRectangle;
 
 #[derive(Component)]
 pub struct CollidableEntity {
@@ -236,5 +238,78 @@ impl Quadtree {
         self.northwest = None;
         self.southeast = None;
         self.southwest = None;
+    }
+    pub fn draw(&self, commands: &mut Commands) {
+        let x = self.boundary.x;
+        let y = self.boundary.y;
+        let w = self.boundary.width;
+        let h = self.boundary.height;
+
+        // commands.spawn(SpriteBundle {
+        //     sprite: Sprite {
+        //         color: Color::WHITE,
+        //         custom_size: Some(Vec2::new(w, h)),
+
+        //         ..Default::default()
+        //     },
+        //     transform: Transform::from_translation(Vec3::new(x, y, 0.0)),
+        //     ..Default::default()
+        // })
+        // .insert(DebugRectangle);
+        // Draw each wall separately so we can see the lines
+        commands.spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(w, 5.0)),
+
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(x, y + h / 2.0, 0.0)),
+            ..Default::default()
+        })
+        .insert(DebugRectangle);
+
+        commands.spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(w, 5.0)),
+
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(x, y - h / 2.0, 0.0)),
+            ..Default::default()
+        })
+        .insert(DebugRectangle);
+
+        commands.spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(5.0, h)),
+
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(x - w / 2.0, y, 0.0)),
+            ..Default::default()
+        })
+        .insert(DebugRectangle);
+
+        commands.spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::WHITE,
+                custom_size: Some(Vec2::new(5.0, h)),
+
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(x + w / 2.0, y, 0.0)),
+            ..Default::default()
+        })
+        .insert(DebugRectangle);
+
+        if self.divided {
+            self.northeast.as_ref().unwrap().draw(commands);
+            self.northwest.as_ref().unwrap().draw(commands);
+            self.southeast.as_ref().unwrap().draw(commands);
+            self.southwest.as_ref().unwrap().draw(commands);
+        }
     }
 }
