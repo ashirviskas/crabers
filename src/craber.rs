@@ -5,7 +5,7 @@ use rand::Rng;
 use crate::common::*;
 
 const ENERGY_CONSUMPTION_RATE: f32 = 0.1;
-const SPEED_FACTOR: f32 = 10.0;
+const SPEED_FACTOR: f32 = 1000.0;
 
 pub enum CraberTexture {
     A,
@@ -33,6 +33,9 @@ pub struct Craber {
 
 #[derive(Resource)]
 pub struct CraberSpawnTimer(pub Timer);
+
+#[derive(Resource)]
+pub struct RaversTimer(pub Timer);
 
 pub fn energy_to_color(energy: f32, max_energy: f32) -> Color {
     let energy_ratio = energy / max_energy;
@@ -119,6 +122,19 @@ pub fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: 
         if craber.energy <= 0.0 {
             velocity.0 = Vec2::ZERO; // Stop movement
             craber.health -= 1.0; // Reduce health if needed
+        }
+    }
+}
+
+// Make crabers switch directions every X seconds
+pub fn ravers(
+    mut query: Query<(&mut Craber, &mut Velocity)>,
+    time: Res<Time>,
+    mut timer: ResMut<RaversTimer>,
+) {
+    if timer.0.tick(time.delta()).just_finished() {
+        for (mut craber, mut velocity) in query.iter_mut() {
+            velocity.0 = velocity.0 * -1.0;
         }
     }
 }

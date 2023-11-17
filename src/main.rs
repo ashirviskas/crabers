@@ -17,7 +17,8 @@ use common::*;
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.01;
 const CRABER_SPAWN_RATE: f32 = 0.001;
-const QUAD_TREE_CAPACITY: usize = 8;
+const QUAD_TREE_CAPACITY: usize = 16;
+const RAVERS_TIMER: f32 = 0.5;
 
 fn main() {
     App::new()
@@ -45,6 +46,7 @@ fn main() {
         .add_systems(Update, despawn_dead_crabers)
         // .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
+        .add_systems(Update, ravers)
         // .add_systems(Update, draw_quadtree_debug)
         .run();
 }
@@ -74,6 +76,10 @@ fn setup(mut commands: Commands) {
     )));
     commands.insert_resource(InformationTimer(Timer::from_seconds(
         1.0,
+        TimerMode::Repeating,
+    )));
+    commands.insert_resource(RaversTimer(Timer::from_seconds(
+        RAVERS_TIMER,
         TimerMode::Repeating,
     )));
 
