@@ -1,8 +1,9 @@
-use bevy::diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin};
-use bevy::prelude::*;
-use bevy::time::{Timer, TimerMode};
+use bevy::{
+    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    prelude::*,
+    time::{Timer, TimerMode},
+};
 use bevy_pancam::{PanCam, PanCamPlugin};
-
 use rand::Rng;
 
 #[derive(Resource)]
@@ -22,11 +23,11 @@ fn main() {
         .add_plugins(PanCamPlugin)
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .insert_resource(SelectedCraber::default())
+        .insert_resource(SelectedEntity::default())
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
-        .add_systems(Update, craber_selection)
-        .add_systems(Update, update_selected_craber_info)
+        .add_systems(Update, entity_selection)
+        .add_systems(Update, update_selected_entity_info)
         .add_systems(Update, update_ui)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
@@ -72,7 +73,7 @@ fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
     });
 }
 
-fn update_ui(selected: Res<SelectedCraber>, mut query: Query<&mut Text>) {
+fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
     for mut text in query.iter_mut() {
         if let Some(_) = selected.entity {
             text.sections[0].value = format!(
@@ -86,7 +87,17 @@ fn update_ui(selected: Res<SelectedCraber>, mut query: Query<&mut Text>) {
 }
 
 #[derive(Component)]
-struct SelectableCraber;
+enum SelectableEntity {
+    Craber,
+    Food,
+}
+
+#[derive(Default, Resource)]
+struct SelectedEntity {
+    entity: Option<Entity>,
+    health: f32,
+    energy: f32,
+}
 
 #[derive(Component)]
 struct Craber {
@@ -94,13 +105,6 @@ struct Craber {
     max_health: f32,
     energy: f32,
     health: f32,
-}
-
-#[derive(Default, Resource)]
-struct SelectedCraber {
-    entity: Option<Entity>,
-    health: f32,
-    energy: f32,
 }
 
 #[derive(Component)]
@@ -127,7 +131,8 @@ fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<FoodS
                 transform: Transform::from_translation(position.extend(0.0)),
                 ..Default::default()
             })
-            .insert(Food { energy_value });
+            .insert(Food { energy_value })
+            .insert(SelectableEntity::Food);
     }
 }
 
@@ -153,7 +158,7 @@ fn craber_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<Cra
                 energy: 100.0,
                 health: 100.0,
             })
-            .insert(SelectableCraber)
+            .insert(SelectableEntity::Craber)
             .insert(Velocity(velocity));
     }
 }
@@ -226,11 +231,11 @@ fn despawn_dead_crabers(mut commands: Commands, query: Query<(Entity, &Craber)>)
     }
 }
 
-fn craber_selection(
+fn entity_selection(
     mouse_button_input: Res<Input<MouseButton>>,
     windows: Query<&Window>,
-    query: Query<(Entity, &Transform), With<SelectableCraber>>,
-    mut selected: ResMut<SelectedCraber>,
+    query: Query<(Entity, &Transform, &SelectableEntity), With<SelectableEntity>>,
+    mut selected: ResMut<SelectedEntity>,
     camera_query: Query<(&Camera, &Transform, &OrthographicProjection)>,
 ) {
     let window = windows.single();
@@ -239,12 +244,20 @@ fn craber_selection(
             let camera = camera_query.iter().next().unwrap().1;
             let camera_projection = camera_query.iter().next().unwrap().2;
             let new_position = window_to_world(position, &window, camera, camera_projection);
-            for (entity, transform) in query.iter() {
+            for (entity, transform, selectable_type) in query.iter() {
                 println!("Entity {:?} at {:?}", entity, transform);
                 if collides(transform, &Transform::from_translation(new_position)) {
                     selected.entity = Some(entity);
-                    selected.health = 0.0;
-                    selected.energy = 0.0;
+                    match selectable_type {
+                        SelectableEntity::Craber => {
+                            selected.health = 0.0;
+                            selected.energy = 0.0;
+                        }
+                        SelectableEntity::Food => {
+                            selected.health = 0.0;
+                            selected.energy = 0.0;
+                        }
+                    }
                 }
             }
         }
@@ -269,11 +282,21 @@ fn window_to_world(
     world_position
 }
 
-fn update_selected_craber_info(mut selected: ResMut<SelectedCraber>, craber_query: Query<&Craber>) {
+fn update_selected_entity_info(
+    mut selected: ResMut<SelectedEntity>,
+    craber_query: Query<&Craber>,
+    food_query: Query<&Food>,
+) {
     if let Some(entity) = selected.entity {
+        // Check if the selected entity is a Craber
         if let Ok(craber) = craber_query.get(entity) {
             selected.health = craber.health;
             selected.energy = craber.energy;
+        }
+        // Check if the selected entity is Food
+        else if let Ok(food) = food_query.get(entity) {
+            selected.health = 0.0; // Food doesn't have health, so set to 0
+            selected.energy = food.energy_value; // Set energy to the value of the food
         }
     }
 }
