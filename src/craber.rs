@@ -126,15 +126,20 @@ pub fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: 
     }
 }
 
-// Make crabers switch directions every X seconds
+// Make crabers switch directions every X seconds and change color to random
 pub fn ravers(
-    mut query: Query<(&mut Craber, &mut Velocity)>,
+    mut query: Query<(&mut Craber, &mut Velocity, &mut Sprite)>,
     time: Res<Time>,
     mut timer: ResMut<RaversTimer>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
-        for (mut craber, mut velocity) in query.iter_mut() {
+        for (mut craber, mut velocity, mut sprite) in query.iter_mut() {
             velocity.0 = velocity.0 * -1.0;
+            sprite.color = Color::rgb(
+                rand::thread_rng().gen_range(0.0..1.0),
+                rand::thread_rng().gen_range(0.0..1.0),
+                rand::thread_rng().gen_range(0.0..1.0),
+            );
         }
     }
 }

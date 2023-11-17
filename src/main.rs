@@ -18,7 +18,7 @@ const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.01;
 const CRABER_SPAWN_RATE: f32 = 0.001;
 const QUAD_TREE_CAPACITY: usize = 16;
-const RAVERS_TIMER: f32 = 0.5;
+const RAVERS_TIMER: f32 = 0.2;
 
 fn main() {
     App::new()
