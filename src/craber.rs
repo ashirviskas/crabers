@@ -1,9 +1,26 @@
 use bevy::prelude::*;
+use rand::prelude::SliceRandom;
 use rand::Rng;
 
 use crate::common::*;
 
 const ENERGY_CONSUMPTION_RATE: f32 = 0.1;
+
+pub enum CraberTexture {
+    A,
+    B,
+    C,
+}
+
+impl CraberTexture {
+    pub fn path(&self) -> &str {
+        match self {
+            CraberTexture::A => "textures/crabers/Craber_a.png",
+            CraberTexture::B => "textures/crabers/Craber_b.png",
+            CraberTexture::C => "textures/crabers/Craber_c.png",
+        }
+    }
+}
 
 #[derive(Component)]
 pub struct Craber {
@@ -39,6 +56,7 @@ pub fn craber_spawner(
     mut commands: Commands,
     time: Res<Time>,
     mut timer: ResMut<CraberSpawnTimer>,
+    asset_server: Res<AssetServer>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
         let mut rng = rand::thread_rng();
@@ -47,14 +65,18 @@ pub fn craber_spawner(
             rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
         );
         let velocity = Vec2::new(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
-
+        // Choose a random texture
+        let craber_texture = [CraberTexture::A, CraberTexture::B, CraberTexture::C]
+            .choose(&mut rng)
+            .unwrap();
         commands
             .spawn(SpriteBundle {
                 sprite: Sprite {
-                    color: Color::RED, // Different color to distinguish from food
+                    color: Color::rgb(1.0, 1.0, 1.0),
                     custom_size: Some(Vec2::new(10.0, 10.0)),
                     ..Default::default()
                 },
+                texture: asset_server.load(craber_texture.path()),
                 transform: Transform::from_translation(position.extend(0.0)),
                 ..Default::default()
             })

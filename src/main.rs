@@ -40,7 +40,7 @@ fn main() {
         .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
-        .add_systems(Update, draw_quadtree_debug)
+        // .add_systems(Update, draw_quadtree_debug)
         .run();
 }
 
