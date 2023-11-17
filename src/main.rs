@@ -35,11 +35,11 @@ fn main() {
         .add_systems(Update, craber_spawner)
         .add_systems(Update, craber_movement)
         // SAP
-        .add_systems(Update, update_sap)
-        .add_systems(Update, handle_collisions_sap)
+        // .add_systems(Update, update_sap)
+        // .add_systems(Update, handle_collisions_sap)
         // Quadtree
-        // .add_systems(Update, handle_collisions_quadtree)
-        // .add_systems(Update, quad_tree_update)
+        .add_systems(Update, handle_collisions_quadtree)
+        .add_systems(Update, quad_tree_update)
         // other
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
@@ -77,8 +77,8 @@ fn setup(mut commands: Commands) {
         TimerMode::Repeating,
     )));
 
-    // commands.insert_resource(Quadtree::new(boundary, QUAD_TREE_CAPACITY));
-    commands.insert_resource(Sap::new());
+    commands.insert_resource(Quadtree::new(boundary, QUAD_TREE_CAPACITY));
+    // commands.insert_resource(Sap::new());
 }
 
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
