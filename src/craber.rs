@@ -5,6 +5,7 @@ use rand::Rng;
 use crate::common::*;
 
 const ENERGY_CONSUMPTION_RATE: f32 = 0.1;
+const SPEED_FACTOR: f32 = 10.0;
 
 pub enum CraberTexture {
     A,
@@ -64,7 +65,7 @@ pub fn craber_spawner(
             rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
             rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
         );
-        let velocity = Vec2::new(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
+        let velocity = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR;
         // Choose a random texture
         let craber_texture = [CraberTexture::A, CraberTexture::B, CraberTexture::C]
             .choose(&mut rng)
