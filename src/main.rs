@@ -14,10 +14,9 @@ mod common;
 use bevy_pancam::{PanCam, PanCamPlugin};
 use common::*;
 
-const ENERGY_CONSUMPTION_RATE: f32 = 1.0;
-const SOME_COLLISION_THRESHOLD: f32 = 10.0;
-const FOOD_SPAWN_RATE: f32 = 2.0;
-const CRABER_SPAWN_RATE: f32 = 3.0;
+const SOME_COLLISION_THRESHOLD: f32 = 5.0;
+const FOOD_SPAWN_RATE: f32 = 0.01;
+const CRABER_SPAWN_RATE: f32 = 0.01;
 
 fn main() {
     App::new()
@@ -38,10 +37,13 @@ fn main() {
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, update_craber_color)
+        .add_systems(Update, print_current_entity_count)
         .run();
 }
 
 fn setup(mut commands: Commands) {
+
+    let boundary = Rectangle { x: 0.0, y: 0.0, width: WORLD_SIZE * 2., height: WORLD_SIZE * 2. };
     commands.spawn(Camera2dBundle::default()).insert(PanCam {
         grab_buttons: vec![MouseButton::Right], // which buttons should drag the camera
         enabled: true,        // when false, controls are disabled. See toggle example.
@@ -58,6 +60,12 @@ fn setup(mut commands: Commands) {
         CRABER_SPAWN_RATE,
         TimerMode::Repeating,
     )));
+    commands.insert_resource(InformationTimer(Timer::from_seconds(
+        1.0,
+        TimerMode::Repeating,
+    )));
+
+    commands.insert_resource(Quadtree::new(boundary, 4));
 }
 
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -90,27 +98,41 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
 
 fn handle_collisions(
     mut commands: Commands,
-    mut craber_query: Query<(Entity, &mut Craber, &Transform)>,
-    food_query: Query<(Entity, &Food, &Transform)>,
+    mut quadtree: ResMut<Quadtree>,
+    mut craber_query: Query<(Entity, &EntityType, &mut Craber, &Transform)>,
+    food_query: Query<(Entity, &EntityType, &Food, &Transform)>,
 ) {
-    for (craber_entity, mut craber, craber_transform) in craber_query.iter_mut() {
-        for (food_entity, food, food_transform) in food_query.iter() {
-            if collides(craber_transform, food_transform, SOME_COLLISION_THRESHOLD) {
-                craber.energy += food.energy_value;
-                commands.entity(food_entity).despawn(); // Remove food on collision
-            }
-        }
+    quadtree.clear();
+    for (entity, _, _, transform) in craber_query.iter_mut() {
+        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
+        quadtree.insert(quad_tree_entity);
     }
-}
+    for (entity, _, _, transform) in food_query.iter() {
+        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
+        quadtree.insert(quad_tree_entity);
+    }
 
-fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: Res<Time>) {
-    for (mut craber, mut velocity) in query.iter_mut() {
-        craber.energy -= ENERGY_CONSUMPTION_RATE * time.delta_seconds();
+    // Use Quadtree for collision detection
+    // let mut found = Vec::new();
+    for (entity, entity_type, mut craber, transform) in craber_query.iter_mut() {
+        let search_area = Rectangle {
+            x: transform.translation.x,
+            y: transform.translation.y,
+            width: SOME_COLLISION_THRESHOLD,
+            height: SOME_COLLISION_THRESHOLD,
+        };
+        let found = quadtree.query(&search_area);
+        // quadtree.query(&search_area);
 
-        // Handle low energy situations
-        if craber.energy <= 0.0 {
-            velocity.0 = Vec2::ZERO; // Stop movement
-            craber.health -= 1.0; // Reduce health if needed
+        for point in found.into_iter() {
+            if point.entity != entity {
+                if let Ok(food) = food_query.get(point.entity) {
+                    craber.energy += food.2.energy_value;
+                    // println!("Destroying {:?}", point.entity);
+                    // println!("Collision between {:?} and {:?}", entity_type, point.entity);
+                    commands.entity(point.entity).despawn();
+                }
+            }
         }
     }
 }
@@ -129,7 +151,7 @@ fn entity_selection(
             let camera_projection = camera_query.iter().next().unwrap().2;
             let new_position = window_to_world(position, &window, camera, camera_projection);
             for (entity, transform, selectable_type) in query.iter() {
-                println!("Entity {:?} at {:?}", entity, transform);
+                // println!("Entity {:?} at {:?}", entity, transform);
                 if collides(
                     transform,
                     &Transform::from_translation(new_position),

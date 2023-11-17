@@ -3,6 +3,8 @@ use rand::Rng;
 
 use crate::common::*;
 
+const ENERGY_CONSUMPTION_RATE: f32 = 1.0;
+
 #[derive(Component)]
 pub struct Craber {
     pub max_energy: f32,
@@ -40,7 +42,7 @@ pub fn craber_spawner(
 ) {
     if timer.0.tick(time.delta()).just_finished() {
         let mut rng = rand::thread_rng();
-        let position = Vec2::new(rng.gen_range(-200.0..200.0), rng.gen_range(-200.0..200.0));
+        let position = Vec2::new(rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE), rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE));
         let velocity = Vec2::new(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
 
         commands
@@ -60,7 +62,8 @@ pub fn craber_spawner(
                 health: 100.0,
             })
             .insert(SelectableEntity::Craber)
-            .insert(Velocity(velocity));
+            .insert(Velocity(velocity))
+            .insert(EntityType::Craber);
     }
 }
 
@@ -68,7 +71,7 @@ pub fn craber_movement(
     mut query: Query<(&mut Transform, &Velocity), With<Craber>>,
     time: Res<Time>,
 ) {
-    let boundary = 200.0; // Define the boundary of your 2D space
+    let boundary = WORLD_SIZE; // Define the boundary of your 2D space
     for (mut transform, velocity) in query.iter_mut() {
         transform.translation += (velocity.0 * time.delta_seconds()).extend(0.0);
 
@@ -76,5 +79,17 @@ pub fn craber_movement(
         let translation = &mut transform.translation;
         translation.x = wrap_around(translation.x, boundary);
         translation.y = wrap_around(translation.y, boundary);
+    }
+}
+
+pub fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: Res<Time>) {
+    for (mut craber, mut velocity) in query.iter_mut() {
+        craber.energy -= ENERGY_CONSUMPTION_RATE * time.delta_seconds();
+
+        // Handle low energy situations
+        if craber.energy <= 0.0 {
+            velocity.0 = Vec2::ZERO; // Stop movement
+            craber.health -= 1.0; // Reduce health if needed
+        }
     }
 }
