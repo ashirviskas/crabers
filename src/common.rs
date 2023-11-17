@@ -340,3 +340,58 @@ impl Quadtree {
         }
     }
 }
+
+// SAP - Sweep and Prune
+
+#[derive(Component, Debug, Clone)]
+pub struct SapEntity {
+    pub entity: Entity,
+    pub start: f32, // Start of the interval on the x-axis
+    pub end: f32,   // End of the interval on the x-axis
+}
+
+#[derive(Resource)]
+pub struct Sap {
+    pub entities: Vec<SapEntity>, // Sorted by the start of the interval
+}
+
+impl Sap {
+    pub fn new() -> Self {
+        Sap {
+            entities: Vec::new(),
+        }
+    }
+
+    // Update the SAP structure
+    pub fn update(&mut self, query: Query<(Entity, &Transform, &CollidableEntity)>) {
+        self.entities.clear();
+        for (entity, transform, collidable) in query.iter() {
+            let start = transform.translation.x - collidable.collision_threshold / 2.0;
+            let end = transform.translation.x + collidable.collision_threshold / 2.0;
+            self.entities.push(SapEntity { entity, start, end });
+        }
+        self.entities
+            .sort_by(|a, b| a.start.partial_cmp(&b.start).unwrap());
+    }
+
+    // Function to perform the sweep and prune
+    pub fn sweep_and_prune(&self) -> Vec<(Entity, Entity)> {
+        let mut active = Vec::new();
+        let mut potential_collisions = Vec::new();
+
+        for entity in &self.entities {
+            active.retain(|&e: &usize| self.entities[e].end > entity.start);
+            for &active_entity in &active {
+                potential_collisions.push((entity.entity, self.entities[active_entity].entity));
+            }
+            active.push(
+                self.entities
+                    .iter()
+                    .position(|e| e.entity == entity.entity)
+                    .unwrap(),
+            );
+        }
+
+        potential_collisions
+    }
+}

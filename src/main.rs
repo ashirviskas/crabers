@@ -34,8 +34,13 @@ fn main() {
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
         .add_systems(Update, craber_movement)
-        .add_systems(Update, handle_collisions)
-        .add_systems(Update, quad_tree_update)
+        // SAP
+        .add_systems(Update, update_sap)
+        .add_systems(Update, handle_collisions_sap)
+        // Quadtree
+        // .add_systems(Update, handle_collisions_quadtree)
+        // .add_systems(Update, quad_tree_update)
+        // other
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, update_craber_color)
@@ -72,7 +77,8 @@ fn setup(mut commands: Commands) {
         TimerMode::Repeating,
     )));
 
-    commands.insert_resource(Quadtree::new(boundary, QUAD_TREE_CAPACITY));
+    // commands.insert_resource(Quadtree::new(boundary, QUAD_TREE_CAPACITY));
+    commands.insert_resource(Sap::new());
 }
 
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -103,24 +109,12 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
     }
 }
 
-fn handle_collisions(
+fn handle_collisions_quadtree(
     mut commands: Commands,
     mut quadtree: ResMut<Quadtree>,
     mut craber_query: Query<(Entity, &EntityType, &mut Craber, &Transform)>,
     food_query: Query<(Entity, &EntityType, &Food, &Transform)>,
 ) {
-    // quadtree.clear();
-    // for (entity, _, _, transform) in craber_query.iter_mut() {
-    //     let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
-    //     quadtree.insert(quad_tree_entity);
-    // }
-    // for (entity, _, _, transform) in food_query.iter() {
-    //     let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
-    //     quadtree.insert(quad_tree_entity);
-    // }
-
-    // Use Quadtree for collision detection
-    // let mut found = Vec::new();
     for (entity, entity_type, mut craber, transform) in craber_query.iter_mut() {
         let search_area = Rectangle {
             x: transform.translation.x,
@@ -245,4 +239,51 @@ fn draw_quadtree_debug(
         commands.entity(entity).despawn();
     }
     quadtree.draw(&mut commands);
+}
+
+// SAP
+
+fn update_sap(mut sap: ResMut<Sap>, query: Query<(Entity, &Transform, &CollidableEntity)>) {
+    sap.update(query);
+}
+
+fn handle_collisions_sap(
+    sap: Res<Sap>,
+    mut commands: Commands,
+    mut craber_query: Query<(Entity, &mut Craber, &Transform)>, // Mutable reference to Craber
+    food_query: Query<(Entity, &Food, &Transform)>,
+) {
+    let potential_collisions = sap.sweep_and_prune();
+    if potential_collisions.is_empty() {
+        return;
+    }
+    // println!("Potential collisions: {:?}", potential_collisions);
+    for (entity_a, entity_b) in potential_collisions {
+        // Check if entity_a is a craber
+        if let Ok((craber_entity, mut craber, craber_transform)) = craber_query.get_mut(entity_a) {
+            // Check if entity_b is food
+            if let Ok((food_entity, food, food_transform)) = food_query.get(entity_b) {
+                // Perform collision check between craber and food
+                if collides(craber_transform, food_transform, SOME_COLLISION_THRESHOLD) {
+                    // Collision logic (e.g., increase energy of Craber, despawn Food entity)
+                    craber.energy += food.energy_value;
+                    commands.entity(food_entity).despawn();
+                }
+            }
+        }
+        // Check if entity_b is a craber
+        else if let Ok((craber_entity, mut craber, craber_transform)) =
+            craber_query.get_mut(entity_b)
+        {
+            // Check if entity_a is food
+            if let Ok((food_entity, food, food_transform)) = food_query.get(entity_a) {
+                // Perform collision check between craber and food
+                if collides(craber_transform, food_transform, SOME_COLLISION_THRESHOLD) {
+                    // Collision logic
+                    craber.energy += food.energy_value;
+                    commands.entity(food_entity).despawn();
+                }
+            }
+        }
+    }
 }

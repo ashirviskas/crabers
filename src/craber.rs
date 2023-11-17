@@ -87,6 +87,9 @@ pub fn craber_spawner(
                 health: 100.0,
             })
             .insert(SelectableEntity::Craber)
+            .insert(CollidableEntity {
+                collision_threshold: 20.0,
+            })
             .insert(Velocity(velocity))
             .insert(EntityType::Craber);
     }

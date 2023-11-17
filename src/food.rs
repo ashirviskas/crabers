@@ -31,6 +31,9 @@ pub fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<F
                 ..Default::default()
             })
             .insert(Food { energy_value })
+            .insert(CollidableEntity {
+                collision_threshold: 20.0,
+            })
             .insert(SelectableEntity::Food)
             .insert(EntityType::Food);
     }
