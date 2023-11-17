@@ -46,10 +46,14 @@ pub fn wrap_around(coord: f32, boundary: f32) -> f32 {
 #[derive(Resource)]
 pub struct InformationTimer(pub Timer);
 
-pub fn print_current_entity_count(time: Res<Time>, query: Query<&Transform>, mut timer: ResMut<InformationTimer>) {
-        if timer.0.tick(time.delta()).just_finished() {
-            println!("Current entity count: {}", query.iter().count());
-        }
+pub fn print_current_entity_count(
+    time: Res<Time>,
+    query: Query<&Transform>,
+    mut timer: ResMut<InformationTimer>,
+) {
+    if timer.0.tick(time.delta()).just_finished() {
+        println!("Current entity count: {}", query.iter().count());
+    }
 }
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
@@ -85,17 +89,17 @@ pub struct Rectangle {
 impl Rectangle {
     pub fn contains(&self, quadtreeentity: &QuadtreeEntity) -> bool {
         let point = quadtreeentity.position;
-        point.x >= self.x - self.width / 2.0 &&
-        point.x <= self.x + self.width / 2.0 &&
-        point.y >= self.y - self.height / 2.0 &&
-        point.y <= self.y + self.height / 2.0
+        point.x >= self.x - self.width / 2.0
+            && point.x <= self.x + self.width / 2.0
+            && point.y >= self.y - self.height / 2.0
+            && point.y <= self.y + self.height / 2.0
     }
 
     pub fn intersects(&self, range: &Rectangle) -> bool {
-        !(range.x - range.width / 2.0 > self.x + self.width / 2.0 ||
-          range.x + range.width / 2.0 < self.x - self.width / 2.0 ||
-          range.y - range.height / 2.0 > self.y + self.height / 2.0 ||
-          range.y + range.height / 2.0 < self.y - self.height / 2.0)
+        !(range.x - range.width / 2.0 > self.x + self.width / 2.0
+            || range.x + range.width / 2.0 < self.x - self.width / 2.0
+            || range.y - range.height / 2.0 > self.y + self.height / 2.0
+            || range.y + range.height / 2.0 < self.y - self.height / 2.0)
     }
 }
 
@@ -150,7 +154,6 @@ impl Quadtree {
         true
     }
 
-
     pub fn insert(&mut self, point: QuadtreeEntity) -> bool {
         if !self.boundary.contains(&point) {
             return false;
@@ -191,16 +194,36 @@ impl Quadtree {
         let w = self.boundary.width / 2.0;
         let h = self.boundary.height / 2.0;
 
-        let ne = Rectangle { x: x + w / 2.0, y: y - h / 2.0, width: w, height: h };
+        let ne = Rectangle {
+            x: x + w / 2.0,
+            y: y - h / 2.0,
+            width: w,
+            height: h,
+        };
         self.northeast = Some(Box::new(Quadtree::new(ne, self.capacity)));
 
-        let nw = Rectangle { x: x - w / 2.0, y: y - h / 2.0, width: w, height: h };
+        let nw = Rectangle {
+            x: x - w / 2.0,
+            y: y - h / 2.0,
+            width: w,
+            height: h,
+        };
         self.northwest = Some(Box::new(Quadtree::new(nw, self.capacity)));
 
-        let se = Rectangle { x: x + w / 2.0, y: y + h / 2.0, width: w, height: h };
+        let se = Rectangle {
+            x: x + w / 2.0,
+            y: y + h / 2.0,
+            width: w,
+            height: h,
+        };
         self.southeast = Some(Box::new(Quadtree::new(se, self.capacity)));
 
-        let sw = Rectangle { x: x - w / 2.0, y: y + h / 2.0, width: w, height: h };
+        let sw = Rectangle {
+            x: x - w / 2.0,
+            y: y + h / 2.0,
+            width: w,
+            height: h,
+        };
         self.southwest = Some(Box::new(Quadtree::new(sw, self.capacity)));
 
         self.divided = true;
@@ -257,53 +280,57 @@ impl Quadtree {
         // })
         // .insert(DebugRectangle);
         // Draw each wall separately so we can see the lines
-        commands.spawn(SpriteBundle {
-            sprite: Sprite {
-                color: Color::WHITE,
-                custom_size: Some(Vec2::new(w, 5.0)),
+        commands
+            .spawn(SpriteBundle {
+                sprite: Sprite {
+                    color: Color::WHITE,
+                    custom_size: Some(Vec2::new(w, 5.0)),
 
+                    ..Default::default()
+                },
+                transform: Transform::from_translation(Vec3::new(x, y + h / 2.0, 0.0)),
                 ..Default::default()
-            },
-            transform: Transform::from_translation(Vec3::new(x, y + h / 2.0, 0.0)),
-            ..Default::default()
-        })
-        .insert(DebugRectangle);
+            })
+            .insert(DebugRectangle);
 
-        commands.spawn(SpriteBundle {
-            sprite: Sprite {
-                color: Color::WHITE,
-                custom_size: Some(Vec2::new(w, 5.0)),
+        commands
+            .spawn(SpriteBundle {
+                sprite: Sprite {
+                    color: Color::WHITE,
+                    custom_size: Some(Vec2::new(w, 5.0)),
 
+                    ..Default::default()
+                },
+                transform: Transform::from_translation(Vec3::new(x, y - h / 2.0, 0.0)),
                 ..Default::default()
-            },
-            transform: Transform::from_translation(Vec3::new(x, y - h / 2.0, 0.0)),
-            ..Default::default()
-        })
-        .insert(DebugRectangle);
+            })
+            .insert(DebugRectangle);
 
-        commands.spawn(SpriteBundle {
-            sprite: Sprite {
-                color: Color::WHITE,
-                custom_size: Some(Vec2::new(5.0, h)),
+        commands
+            .spawn(SpriteBundle {
+                sprite: Sprite {
+                    color: Color::WHITE,
+                    custom_size: Some(Vec2::new(5.0, h)),
 
+                    ..Default::default()
+                },
+                transform: Transform::from_translation(Vec3::new(x - w / 2.0, y, 0.0)),
                 ..Default::default()
-            },
-            transform: Transform::from_translation(Vec3::new(x - w / 2.0, y, 0.0)),
-            ..Default::default()
-        })
-        .insert(DebugRectangle);
+            })
+            .insert(DebugRectangle);
 
-        commands.spawn(SpriteBundle {
-            sprite: Sprite {
-                color: Color::WHITE,
-                custom_size: Some(Vec2::new(5.0, h)),
+        commands
+            .spawn(SpriteBundle {
+                sprite: Sprite {
+                    color: Color::WHITE,
+                    custom_size: Some(Vec2::new(5.0, h)),
 
+                    ..Default::default()
+                },
+                transform: Transform::from_translation(Vec3::new(x + w / 2.0, y, 0.0)),
                 ..Default::default()
-            },
-            transform: Transform::from_translation(Vec3::new(x + w / 2.0, y, 0.0)),
-            ..Default::default()
-        })
-        .insert(DebugRectangle);
+            })
+            .insert(DebugRectangle);
 
         if self.divided {
             self.northeast.as_ref().unwrap().draw(commands);

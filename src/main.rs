@@ -45,8 +45,12 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-
-    let boundary = Rectangle { x: 0.0, y: 0.0, width: WORLD_SIZE * 2., height: WORLD_SIZE * 2. };
+    let boundary = Rectangle {
+        x: 0.0,
+        y: 0.0,
+        width: WORLD_SIZE * 2.,
+        height: WORLD_SIZE * 2.,
+    };
     commands.spawn(Camera2dBundle::default()).insert(PanCam {
         grab_buttons: vec![MouseButton::Right], // which buttons should drag the camera
         enabled: true,        // when false, controls are disabled. See toggle example.
@@ -221,16 +225,22 @@ fn quad_tree_update(
 ) {
     quadtree.clear();
     for (entity, _, _, transform) in craber_query.iter_mut() {
-        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
+        let quad_tree_entity =
+            QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
         quadtree.insert(quad_tree_entity);
     }
     for (entity, _, _, transform) in food_query.iter() {
-        let quad_tree_entity = QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
+        let quad_tree_entity =
+            QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
         quadtree.insert(quad_tree_entity);
     }
 }
 
-fn draw_quadtree_debug(mut commands: Commands, quadtree: Res<Quadtree>, debug_rectangles: Query<Entity, With<DebugRectangle>>) {
+fn draw_quadtree_debug(
+    mut commands: Commands,
+    quadtree: Res<Quadtree>,
+    debug_rectangles: Query<Entity, With<DebugRectangle>>,
+) {
     for entity in debug_rectangles.iter() {
         commands.entity(entity).despawn();
     }

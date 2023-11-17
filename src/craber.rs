@@ -42,7 +42,10 @@ pub fn craber_spawner(
 ) {
     if timer.0.tick(time.delta()).just_finished() {
         let mut rng = rand::thread_rng();
-        let position = Vec2::new(rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE), rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE));
+        let position = Vec2::new(
+            rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
+            rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
+        );
         let velocity = Vec2::new(rng.gen_range(-10.0..10.0), rng.gen_range(-10.0..10.0));
 
         commands
