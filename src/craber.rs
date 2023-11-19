@@ -34,6 +34,9 @@ pub struct Craber {
     pub health: f32,
 }
 
+#[derive(Component)]
+pub struct Acceleration(pub Vec2);
+
 #[derive(Resource)]
 pub struct CraberSpawnTimer(pub Timer);
 
@@ -114,6 +117,8 @@ pub fn craber_spawner(
             })
             .insert(SelectableEntity::Craber)
             .insert(velocity)
+            .insert(Weight { weight: 1.0 })
+            .insert(Acceleration(Vec2::new(0.0, -1.0)))
             .insert(ActiveEvents::COLLISION_EVENTS)
             .insert(EntityType::Craber);
     }

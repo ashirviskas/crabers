@@ -22,10 +22,13 @@ use common::*;
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.01;
 const CRABER_SPAWN_RATE: f32 = 0.001;
+
+const WALL_THICKNESS: f32 = 60.0;
 const QUAD_TREE_CAPACITY: usize = 16;
 const RAVERS_TIMER: f32 = 0.2;
 const BUMPINESS_RANDOMNESS_STRENGTH: f32 = 0.01;
 const GRAVITY: f32 = 0.0;
+const DRAG: f32 = 0.01;
 
 fn main() {
     App::new()
@@ -59,6 +62,7 @@ fn main() {
         .add_event::<DespawnEvent>()
         .add_systems(Update, do_collision)
         .add_systems(Update, do_despawning)
+        .add_systems(Update, (apply_drag, apply_acceleration))
         // Fun and debug stuff
         // .add_systems(Update, ravers)
         // .add_systems(Update, draw_quadtree_debug)
@@ -108,7 +112,7 @@ fn setup(mut commands: Commands) {
         .spawn(SpriteBundle {
             sprite: Sprite {
                 color: Color::rgb(0.5, 0.5, 0.5),
-                custom_size: Some(Vec2::new(WORLD_SIZE * 2.0, 10.0)),
+                custom_size: Some(Vec2::new(WORLD_SIZE * 2.0, WALL_THICKNESS)),
                 ..Default::default()
             },
             transform: Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
@@ -119,7 +123,7 @@ fn setup(mut commands: Commands) {
         .spawn(SpriteBundle {
             sprite: Sprite {
                 color: Color::rgb(0.5, 0.5, 0.5),
-                custom_size: Some(Vec2::new(WORLD_SIZE * 2.0, 10.0)),
+                custom_size: Some(Vec2::new(WORLD_SIZE * 2.0, WALL_THICKNESS)),
                 ..Default::default()
             },
             transform: Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
@@ -130,7 +134,7 @@ fn setup(mut commands: Commands) {
         .spawn(SpriteBundle {
             sprite: Sprite {
                 color: Color::rgb(0.5, 0.5, 0.5),
-                custom_size: Some(Vec2::new(10.0, WORLD_SIZE * 2.0)),
+                custom_size: Some(Vec2::new(WALL_THICKNESS, WORLD_SIZE * 2.0)),
                 ..Default::default()
             },
             transform: Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
@@ -141,7 +145,7 @@ fn setup(mut commands: Commands) {
         .spawn(SpriteBundle {
             sprite: Sprite {
                 color: Color::rgb(0.5, 0.5, 0.5),
-                custom_size: Some(Vec2::new(10.0, WORLD_SIZE * 2.0)),
+                custom_size: Some(Vec2::new(WALL_THICKNESS, WORLD_SIZE * 2.0)),
                 ..Default::default()
             },
             transform: Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
@@ -346,5 +350,29 @@ fn do_despawning(
         if let Ok(entity) = craber_query.get_mut(despawn_event.entity) {
             commands.entity(despawn_event.entity).despawn();
         }
+    }
+}
+
+fn apply_drag(mut commands: Commands, mut query: Query<(Entity, &mut Velocity, &Weight)>) {
+    for (entity, mut velocity, weight) in query.iter_mut() {
+        velocity.linvel *= 1.0 - DRAG * weight.weight;
+        velocity.angvel *= 1.0 - DRAG * weight.weight;
+    }
+}
+
+fn apply_acceleration(
+    mut commands: Commands,
+    mut query: Query<(Entity, &mut Velocity, &Acceleration, &Transform)>,
+) {
+    for (_, mut velocity, acceleration, transform) in query.iter_mut() {
+        // velocity.linvel += acceleration.0;
+        let forward = transform.rotation.mul_vec3(acceleration.0.extend(0.0));
+        // Convert the rotated vector back to 2D
+        let rotated_forward_2d = Vec2::new(forward.x, forward.y);
+        let acceleration_vector = rotated_forward_2d;
+        // println!("Acceleration vector: {:?}", acceleration_vector);
+        // println!("Velocity: {:?}", velocity.linvel);
+        velocity.linvel += acceleration_vector;
+        // println!("Velocity: {:?}", velocity.linvel);
     }
 }

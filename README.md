@@ -24,7 +24,7 @@ This project is a physics-based simulation developed in Bevy, focused on the evo
 - **Horizontal Gene Transfer:** Crabers can transfer genetic information to other crabers through a "gene transfer" action that might happen if both parties are willing and bump into each other [TBD].
 
 ## PoC TODO
-- [ ] Basic movement and collision physics for crabers.
+- [x] Basic movement and collision physics for crabers.
 - [ ] Simple genetic system for craber traits.
 - [ ] Initial implementation of the neural brain with predefined inputs and outputs.
 - [x] Basic environment setup with food source spawning.

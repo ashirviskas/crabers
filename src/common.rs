@@ -14,6 +14,11 @@ pub enum SelectableEntity {
 }
 
 #[derive(Component)]
+pub struct Weight {
+    pub weight: f32,
+}
+
+#[derive(Component)]
 pub struct DebugRectangle;
 
 #[derive(Default, Resource)]
