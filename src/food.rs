@@ -36,10 +36,8 @@ pub fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<F
             })
             .insert(Collider::ball(FOOD_SIZE / 2.0))
             .insert(Food { energy_value })
-            .insert(CollidableEntity {
-                collision_threshold: 20.0,
-            })
             .insert(SelectableEntity::Food)
-            .insert(EntityType::Food);
+            .insert(EntityType::Food)
+            .insert(ActiveEvents::COLLISION_EVENTS);
     }
 }

@@ -92,7 +92,7 @@ pub fn craber_spawner(
             // })
             .spawn(RigidBody::Dynamic)
             .insert(Collider::ball(CRABER_SIZE / 2.0))
-            .insert(Restitution::coefficient(0.7))
+            .insert(Restitution::coefficient(0.8))
             .insert(Name::new("Craber"))
             .insert(TransformBundle::from(Transform::from_translation(
                 position.extend(0.0),
@@ -113,29 +113,13 @@ pub fn craber_spawner(
                 health: 100.0,
             })
             .insert(SelectableEntity::Craber)
-            .insert(CollidableEntity {
-                collision_threshold: 20.0,
-            })
             .insert(velocity)
+            .insert(ActiveEvents::COLLISION_EVENTS)
             .insert(EntityType::Craber);
     }
 }
 
-// pub fn craber_movement(
-//     mut query: Query<(&mut Transform, &Velocity), With<Craber>>,
-//     time: Res<Time>,
-// ) {
-//     let boundary = WORLD_SIZE; // Define the boundary of your 2D space
-//     for (mut transform, velocity) in query.iter_mut() {
-//         transform.translation += (velocity.0 * time.delta_seconds()).extend(0.0);
-
-//         // Wrap around logic
-//         let translation = &mut transform.translation;
-//         translation.x = wrap_around(translation.x, boundary);
-//         translation.y = wrap_around(translation.y, boundary);
-//     }
-// }
-
+// Make crabers lose energy over time
 pub fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: Res<Time>) {
     for (mut craber, mut velocity) in query.iter_mut() {
         craber.energy -= ENERGY_CONSUMPTION_RATE * time.delta_seconds();

@@ -2,6 +2,7 @@ use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     time::{Timer, TimerMode},
+    utils::tracing::Event,
 };
 // use bevy_inspector_egui::quick::WorldInspectorPlugin;
 // use bevy_inspector_egui_rapier::InspectableRapierPlugin;
@@ -24,6 +25,7 @@ const CRABER_SPAWN_RATE: f32 = 0.001;
 const QUAD_TREE_CAPACITY: usize = 16;
 const RAVERS_TIMER: f32 = 0.2;
 const BUMPINESS_RANDOMNESS_STRENGTH: f32 = 0.01;
+const GRAVITY: f32 = 0.0;
 
 fn main() {
     App::new()
@@ -47,15 +49,19 @@ fn main() {
         // .add_systems(Update, update_sap)
         // .add_systems(Update, handle_collisions_sap)
         // Quadtree
-        .add_systems(Update, handle_collisions_quadtree)
-        .add_systems(Update, quad_tree_update)
+        // .add_systems(Update, handle_collisions_quadtree)
+        // .add_systems(Update, quad_tree_update)
         // other
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
         // .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
+        .add_event::<DespawnEvent>()
+        .add_systems(Update, do_collision)
+        .add_systems(Update, do_despawning)
+        // Fun and debug stuff
         // .add_systems(Update, ravers)
-        .add_systems(Update, draw_quadtree_debug)
+        // .add_systems(Update, draw_quadtree_debug)
         .run();
 }
 
@@ -66,7 +72,7 @@ fn setup(mut commands: Commands) {
         width: WORLD_SIZE * 2.,
         height: WORLD_SIZE * 2.,
     };
-    // Spawn ground
+    // setup
 
     commands.spawn(Camera2dBundle::default()).insert(PanCam {
         grab_buttons: vec![MouseButton::Right], // which buttons should drag the camera
@@ -93,8 +99,55 @@ fn setup(mut commands: Commands) {
         TimerMode::Repeating,
     )));
 
-    commands.insert_resource(Quadtree::new(boundary, QUAD_TREE_CAPACITY));
-    // commands.insert_resource(Sap::new());
+    commands.insert_resource(RapierConfiguration {
+        gravity: Vect::new(0.0, GRAVITY),
+        ..Default::default()
+    });
+
+    commands
+        .spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::rgb(0.5, 0.5, 0.5),
+                custom_size: Some(Vec2::new(WORLD_SIZE * 2.0, 10.0)),
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
+            ..Default::default()
+        })
+        .insert(Collider::cuboid(WORLD_SIZE * 2.0, 5.0));
+    commands
+        .spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::rgb(0.5, 0.5, 0.5),
+                custom_size: Some(Vec2::new(WORLD_SIZE * 2.0, 10.0)),
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
+            ..Default::default()
+        })
+        .insert(Collider::cuboid(WORLD_SIZE * 2.0, 5.0));
+    commands
+        .spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::rgb(0.5, 0.5, 0.5),
+                custom_size: Some(Vec2::new(10.0, WORLD_SIZE * 2.0)),
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
+            ..Default::default()
+        })
+        .insert(Collider::cuboid(5.0, WORLD_SIZE * 2.0));
+    commands
+        .spawn(SpriteBundle {
+            sprite: Sprite {
+                color: Color::rgb(0.5, 0.5, 0.5),
+                custom_size: Some(Vec2::new(10.0, WORLD_SIZE * 2.0)),
+                ..Default::default()
+            },
+            transform: Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
+            ..Default::default()
+        })
+        .insert(Collider::cuboid(5.0, WORLD_SIZE * 2.0));
 }
 
 fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
@@ -121,68 +174,6 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
             );
         } else {
             text.sections[0].value = "No craber selected".to_string();
-        }
-    }
-}
-
-// TODO: Make it more dynamic to allow for easier colllision handling
-fn handle_collisions_quadtree(
-    mut commands: Commands,
-    mut quadtree: ResMut<Quadtree>,
-    mut craber_query: Query<
-        (
-            Entity,
-            &EntityType,
-            &mut Craber,
-            &mut Transform,
-            &mut Velocity,
-        ),
-        Without<Food>,
-    >,
-    food_query: Query<(Entity, &EntityType, &Food, &Transform), Without<Craber>>,
-) {
-    let mut rng = rand::thread_rng();
-    for (entity, entity_type, mut craber, mut craber_a_transform, mut craber_a_velocity) in
-        craber_query.iter_mut()
-    {
-        let search_area = Rectangle {
-            x: craber_a_transform.translation.x,
-            y: craber_a_transform.translation.y,
-            width: SOME_COLLISION_THRESHOLD,
-            height: SOME_COLLISION_THRESHOLD,
-        };
-        let found = quadtree.query(&search_area);
-        // quadtree.query(&search_area);
-        for point in found.into_iter() {
-            if point.entity != entity {
-                if let Ok(food) = food_query.get(point.entity) {
-                    craber.energy += food.2.energy_value;
-                    // println!("Destroying {:?}", point.entity);
-                    // println!("Collision between {:?} and {:?}", entity_type, point.entity);
-                    commands.entity(point.entity).despawn();
-                    continue;
-                }
-                // Craber on craber collision
-                // Move crabers away from each other by the opposite of their velocity to prevent them from getting stuck
-                // craber_a_transform.translation.x += craber_a_velocity.0.x * -0.1;
-                // craber_a_transform.translation.y += craber_a_velocity.0.y * -0.1;
-                // Use Craber size to determine how much to move them away from each other
-                // let craber_a_size = craber_a_transform.scale.x * CRABER_SIZE;
-                // let move_away_direction = Vec2::new(
-                //     craber_a_transform.translation.x - point.position.x,
-                //     craber_a_transform.translation.y - point.position.y,
-                // );
-                // craber_a_transform.translation.x += move_away_direction.x;
-                // craber_a_transform.translation.y += move_away_direction.y;
-
-                // Turn crebers around with some randomness
-                let craber_a_velocity_diff =
-                    Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0))
-                        * SPEED_FACTOR
-                        * BUMPINESS_RANDOMNESS_STRENGTH;
-                // craber_a_velocity = craber_a_velocity * -1.0 + craber_a_velocity_diff;
-                // craber_a_velocity.0 = craber_a_velocity.0 * -1.0 + craber_a_velocity_diff;
-            }
         }
     }
 }
@@ -291,49 +282,69 @@ fn draw_quadtree_debug(
     quadtree.draw(&mut commands);
 }
 
-// SAP
+// TODO: Make a separate despawn system for each entity type
 
-fn update_sap(mut sap: ResMut<Sap>, query: Query<(Entity, &Transform, &CollidableEntity)>) {
-    sap.update(query);
-}
-
-fn handle_collisions_sap(
-    sap: Res<Sap>,
+fn do_collision(
     mut commands: Commands,
-    mut craber_query: Query<(Entity, &mut Craber, &Transform)>, // Mutable reference to Craber
-    food_query: Query<(Entity, &Food, &Transform)>,
+    mut collide_event_reader: EventReader<CollisionEvent>,
+    mut query: Query<(Entity, &Transform, &EntityType)>,
+    mut craber_query: Query<(Entity, &mut Craber)>,
+    mut food_query: Query<(Entity, &mut Food)>,
+    mut despawn_events: EventWriter<DespawnEvent>,
 ) {
-    let potential_collisions = sap.sweep_and_prune();
-    if potential_collisions.is_empty() {
-        return;
-    }
-    // println!("Potential collisions: {:?}", potential_collisions);
-    for (entity_a, entity_b) in potential_collisions {
-        // Check if entity_a is a craber
-        if let Ok((craber_entity, mut craber, craber_transform)) = craber_query.get_mut(entity_a) {
-            // Check if entity_b is food
-            if let Ok((food_entity, food, food_transform)) = food_query.get(entity_b) {
-                // Perform collision check between craber and food
-                if collides(craber_transform, food_transform, SOME_COLLISION_THRESHOLD) {
-                    // Collision logic (e.g., increase energy of Craber, despawn Food entity)
-                    craber.energy += food.energy_value;
-                    commands.entity(food_entity).despawn();
+    for collide_event in collide_event_reader.read() {
+        // Check if event Started or Stopped
+        if let CollisionEvent::Started(_, _, _) = collide_event {
+            // println!("Collision started");
+        } else {
+            // println!("Collision stopped");
+            continue;
+        }
+        if let CollisionEvent::Started(entity1, entity2, _) = collide_event {
+            let (entity1_type, entity2_type) = match query.get(*entity1) {
+                Ok(entity1) => match query.get(*entity2) {
+                    Ok(entity2) => (entity1.2, entity2.2),
+                    Err(_) => continue,
+                },
+                Err(_) => continue,
+            };
+
+            match (entity1_type, entity2_type) {
+                (EntityType::Craber, EntityType::Craber) => {
+                    continue;
                 }
+                (EntityType::Craber, EntityType::Food) => {
+                    if let Ok(mut craber) = craber_query.get_mut(*entity1) {
+                        if let Ok(food) = food_query.get(*entity2) {
+                            craber.1.energy += food.1.energy_value;
+                            // commands.entity(*entity2).despawn();
+                            despawn_events.send(DespawnEvent { entity: *entity2 });
+                        }
+                    }
+                }
+                (EntityType::Food, EntityType::Craber) => {
+                    if let Ok(mut craber) = craber_query.get_mut(*entity2) {
+                        if let Ok(food) = food_query.get(*entity1) {
+                            craber.1.energy += food.1.energy_value;
+                            // commands.entity(*entity1).despawn();
+                            despawn_events.send(DespawnEvent { entity: *entity1 });
+                        }
+                    }
+                }
+                _ => {}
             }
         }
-        // Check if entity_b is a craber
-        else if let Ok((craber_entity, mut craber, craber_transform)) =
-            craber_query.get_mut(entity_b)
-        {
-            // Check if entity_a is food
-            if let Ok((food_entity, food, food_transform)) = food_query.get(entity_a) {
-                // Perform collision check between craber and food
-                if collides(craber_transform, food_transform, SOME_COLLISION_THRESHOLD) {
-                    // Collision logic
-                    craber.energy += food.energy_value;
-                    commands.entity(food_entity).despawn();
-                }
-            }
+    }
+}
+
+fn do_despawning(
+    mut commands: Commands,
+    mut despawn_events: EventReader<DespawnEvent>,
+    mut craber_query: Query<(Entity)>,
+) {
+    for despawn_event in despawn_events.read() {
+        if let Ok(entity) = craber_query.get_mut(despawn_event.entity) {
+            commands.entity(despawn_event.entity).despawn();
         }
     }
 }
