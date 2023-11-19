@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use bevy_rapier2d::prelude::*;
+
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
@@ -69,20 +71,39 @@ pub fn craber_spawner(
             rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
             rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
         );
-        let velocity = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR;
+        // let velocity = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR;
+        let velocity: Velocity = Velocity::linear(
+            Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR,
+        );
         // Choose a random texture
         let craber_texture = [CraberTexture::A, CraberTexture::B, CraberTexture::C]
             .choose(&mut rng)
             .unwrap();
         commands
-            .spawn(SpriteBundle {
+            // .spawn(SpriteBundle {
+            //     sprite: Sprite {
+            //         color: Color::rgb(1.0, 1.0, 1.0),
+            //         custom_size: Some(Vec2::new(CRABER_SIZE, CRABER_SIZE)),
+            //         ..Default::default()
+            //     },
+            //     texture: asset_server.load(craber_texture.path()),
+            //     transform: Transform::from_translation(position.extend(0.0)),
+            //     ..Default::default()
+            // })
+            .spawn(RigidBody::Dynamic)
+            .insert(Collider::ball(CRABER_SIZE / 2.0))
+            .insert(Restitution::coefficient(0.7))
+            .insert(Name::new("Craber"))
+            .insert(TransformBundle::from(Transform::from_translation(
+                position.extend(0.0),
+            )))
+            .insert(SpriteBundle {
                 sprite: Sprite {
                     color: Color::rgb(1.0, 1.0, 1.0),
                     custom_size: Some(Vec2::new(CRABER_SIZE, CRABER_SIZE)),
                     ..Default::default()
                 },
                 texture: asset_server.load(craber_texture.path()),
-                transform: Transform::from_translation(position.extend(0.0)),
                 ..Default::default()
             })
             .insert(Craber {
@@ -95,25 +116,25 @@ pub fn craber_spawner(
             .insert(CollidableEntity {
                 collision_threshold: 20.0,
             })
-            .insert(Velocity(velocity))
+            .insert(velocity)
             .insert(EntityType::Craber);
     }
 }
 
-pub fn craber_movement(
-    mut query: Query<(&mut Transform, &Velocity), With<Craber>>,
-    time: Res<Time>,
-) {
-    let boundary = WORLD_SIZE; // Define the boundary of your 2D space
-    for (mut transform, velocity) in query.iter_mut() {
-        transform.translation += (velocity.0 * time.delta_seconds()).extend(0.0);
+// pub fn craber_movement(
+//     mut query: Query<(&mut Transform, &Velocity), With<Craber>>,
+//     time: Res<Time>,
+// ) {
+//     let boundary = WORLD_SIZE; // Define the boundary of your 2D space
+//     for (mut transform, velocity) in query.iter_mut() {
+//         transform.translation += (velocity.0 * time.delta_seconds()).extend(0.0);
 
-        // Wrap around logic
-        let translation = &mut transform.translation;
-        translation.x = wrap_around(translation.x, boundary);
-        translation.y = wrap_around(translation.y, boundary);
-    }
-}
+//         // Wrap around logic
+//         let translation = &mut transform.translation;
+//         translation.x = wrap_around(translation.x, boundary);
+//         translation.y = wrap_around(translation.y, boundary);
+//     }
+// }
 
 pub fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: Res<Time>) {
     for (mut craber, mut velocity) in query.iter_mut() {
@@ -121,7 +142,7 @@ pub fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: 
 
         // Handle low energy situations
         if craber.energy <= 0.0 {
-            velocity.0 = Vec2::ZERO; // Stop movement
+            // velocity.0 = Vec2::ZERO; // Stop movement
             craber.health -= 1.0; // Reduce health if needed
         }
     }
@@ -135,7 +156,8 @@ pub fn ravers(
 ) {
     if timer.0.tick(time.delta()).just_finished() {
         for (mut craber, mut velocity, mut sprite) in query.iter_mut() {
-            velocity.0 = velocity.0 * -1.0;
+            // velocity.0 = velocity.0 * -1.0;
+
             sprite.color = Color::rgb(
                 rand::thread_rng().gen_range(0.0..1.0),
                 rand::thread_rng().gen_range(0.0..1.0),

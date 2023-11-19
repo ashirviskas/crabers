@@ -3,10 +3,11 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
-use rand::Rng;
-// Hashset is used to store the entities that are currently colliding
-use std::collections::HashSet;
+// use bevy_inspector_egui::quick::WorldInspectorPlugin;
+// use bevy_inspector_egui_rapier::InspectableRapierPlugin;
+use bevy_rapier2d::prelude::*;
 
+use rand::Rng;
 mod craber;
 use craber::*;
 
@@ -30,6 +31,9 @@ fn main() {
         .add_plugins(PanCamPlugin)
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
+        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(10.0))
+        // .add_plugins(InspectableRapierPlugin)
+        // .add_plugins(WorldInspectorPlugin::default())
         .insert_resource(SelectedEntity::default())
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
@@ -38,7 +42,7 @@ fn main() {
         .add_systems(Update, update_ui)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
-        .add_systems(Update, craber_movement)
+        // .add_systems(Update, craber_movement)
         // SAP
         // .add_systems(Update, update_sap)
         // .add_systems(Update, handle_collisions_sap)
@@ -51,7 +55,7 @@ fn main() {
         // .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
         // .add_systems(Update, ravers)
-        // .add_systems(Update, draw_quadtree_debug)
+        .add_systems(Update, draw_quadtree_debug)
         .run();
 }
 
@@ -62,6 +66,8 @@ fn setup(mut commands: Commands) {
         width: WORLD_SIZE * 2.,
         height: WORLD_SIZE * 2.,
     };
+    // Spawn ground
+
     commands.spawn(Camera2dBundle::default()).insert(PanCam {
         grab_buttons: vec![MouseButton::Right], // which buttons should drag the camera
         enabled: true,        // when false, controls are disabled. See toggle example.
@@ -175,7 +181,7 @@ fn handle_collisions_quadtree(
                         * SPEED_FACTOR
                         * BUMPINESS_RANDOMNESS_STRENGTH;
                 // craber_a_velocity = craber_a_velocity * -1.0 + craber_a_velocity_diff;
-                craber_a_velocity.0 = craber_a_velocity.0 * -1.0 + craber_a_velocity_diff;
+                // craber_a_velocity.0 = craber_a_velocity.0 * -1.0 + craber_a_velocity_diff;
             }
         }
     }

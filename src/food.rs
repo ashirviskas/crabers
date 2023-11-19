@@ -1,7 +1,11 @@
 use bevy::prelude::*;
+use bevy_rapier2d::prelude::*;
+
 use rand::Rng;
 
 use crate::common::*;
+
+pub const FOOD_SIZE: f32 = 10.0;
 
 #[derive(Resource)]
 pub struct FoodSpawnTimer(pub Timer);
@@ -24,12 +28,13 @@ pub fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<F
             .spawn(SpriteBundle {
                 sprite: Sprite {
                     color: Color::BLUE,
-                    custom_size: Some(Vec2::new(10.0, 10.0)),
+                    custom_size: Some(Vec2::new(FOOD_SIZE, FOOD_SIZE)),
                     ..Default::default()
                 },
                 transform: Transform::from_translation(position.extend(0.0)),
                 ..Default::default()
             })
+            .insert(Collider::ball(FOOD_SIZE / 2.0))
             .insert(Food { energy_value })
             .insert(CollidableEntity {
                 collision_threshold: 20.0,

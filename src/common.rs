@@ -23,8 +23,8 @@ pub struct SelectedEntity {
     pub energy: f32,
 }
 
-#[derive(Component)]
-pub struct Velocity(pub Vec2);
+// #[derive(Component)]
+// pub struct Velocity(pub Vec2);
 
 pub fn collides(a: &Transform, b: &Transform, collision_threshold: f32) -> bool {
     // Simple AABB collision check
