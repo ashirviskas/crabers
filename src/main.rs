@@ -3,6 +3,9 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
+use rand::Rng;
+// Hashset is used to store the entities that are currently colliding
+use std::collections::HashSet;
 
 mod craber;
 use craber::*;
@@ -19,6 +22,7 @@ const FOOD_SPAWN_RATE: f32 = 0.01;
 const CRABER_SPAWN_RATE: f32 = 0.001;
 const QUAD_TREE_CAPACITY: usize = 16;
 const RAVERS_TIMER: f32 = 0.2;
+const BUMPINESS_RANDOMNESS_STRENGTH: f32 = 0.01;
 
 fn main() {
     App::new()
@@ -46,7 +50,7 @@ fn main() {
         .add_systems(Update, despawn_dead_crabers)
         // .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
-        .add_systems(Update, ravers)
+        // .add_systems(Update, ravers)
         // .add_systems(Update, draw_quadtree_debug)
         .run();
 }
@@ -115,16 +119,29 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
     }
 }
 
+// TODO: Make it more dynamic to allow for easier colllision handling
 fn handle_collisions_quadtree(
     mut commands: Commands,
     mut quadtree: ResMut<Quadtree>,
-    mut craber_query: Query<(Entity, &EntityType, &mut Craber, &Transform)>,
-    food_query: Query<(Entity, &EntityType, &Food, &Transform)>,
+    mut craber_query: Query<
+        (
+            Entity,
+            &EntityType,
+            &mut Craber,
+            &mut Transform,
+            &mut Velocity,
+        ),
+        Without<Food>,
+    >,
+    food_query: Query<(Entity, &EntityType, &Food, &Transform), Without<Craber>>,
 ) {
-    for (entity, entity_type, mut craber, transform) in craber_query.iter_mut() {
+    let mut rng = rand::thread_rng();
+    for (entity, entity_type, mut craber, mut craber_a_transform, mut craber_a_velocity) in
+        craber_query.iter_mut()
+    {
         let search_area = Rectangle {
-            x: transform.translation.x,
-            y: transform.translation.y,
+            x: craber_a_transform.translation.x,
+            y: craber_a_transform.translation.y,
             width: SOME_COLLISION_THRESHOLD,
             height: SOME_COLLISION_THRESHOLD,
         };
@@ -137,7 +154,28 @@ fn handle_collisions_quadtree(
                     // println!("Destroying {:?}", point.entity);
                     // println!("Collision between {:?} and {:?}", entity_type, point.entity);
                     commands.entity(point.entity).despawn();
+                    continue;
                 }
+                // Craber on craber collision
+                // Move crabers away from each other by the opposite of their velocity to prevent them from getting stuck
+                // craber_a_transform.translation.x += craber_a_velocity.0.x * -0.1;
+                // craber_a_transform.translation.y += craber_a_velocity.0.y * -0.1;
+                // Use Craber size to determine how much to move them away from each other
+                // let craber_a_size = craber_a_transform.scale.x * CRABER_SIZE;
+                // let move_away_direction = Vec2::new(
+                //     craber_a_transform.translation.x - point.position.x,
+                //     craber_a_transform.translation.y - point.position.y,
+                // );
+                // craber_a_transform.translation.x += move_away_direction.x;
+                // craber_a_transform.translation.y += move_away_direction.y;
+
+                // Turn crebers around with some randomness
+                let craber_a_velocity_diff =
+                    Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0))
+                        * SPEED_FACTOR
+                        * BUMPINESS_RANDOMNESS_STRENGTH;
+                // craber_a_velocity = craber_a_velocity * -1.0 + craber_a_velocity_diff;
+                craber_a_velocity.0 = craber_a_velocity.0 * -1.0 + craber_a_velocity_diff;
             }
         }
     }

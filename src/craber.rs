@@ -5,7 +5,8 @@ use rand::Rng;
 use crate::common::*;
 
 const ENERGY_CONSUMPTION_RATE: f32 = 0.1;
-const SPEED_FACTOR: f32 = 1000.0;
+pub const SPEED_FACTOR: f32 = 100.0;
+pub const CRABER_SIZE: f32 = 10.0;
 
 pub enum CraberTexture {
     A,
@@ -77,7 +78,7 @@ pub fn craber_spawner(
             .spawn(SpriteBundle {
                 sprite: Sprite {
                     color: Color::rgb(1.0, 1.0, 1.0),
-                    custom_size: Some(Vec2::new(10.0, 10.0)),
+                    custom_size: Some(Vec2::new(CRABER_SIZE, CRABER_SIZE)),
                     ..Default::default()
                 },
                 texture: asset_server.load(craber_texture.path()),
