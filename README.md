@@ -3,7 +3,7 @@
 ## Overview
 This project is a physics-based simulation developed in Bevy, focused on the evolution of virtual creatures called "crabers". These crabers live in a 2D space and evolve over time through natural selection and genetic mutation.
 
-![image](https://github.com/ashirviskas/crabers/assets/11985242/9662b535-64e6-4413-aa61-0b582e1c207d)
+![image](https://github.com/ashirviskas/crabers/assets/11985242/305bbd40-010a-4609-90fa-cf8abb4da18a)
 
 
 
