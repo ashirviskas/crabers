@@ -3,14 +3,42 @@
 ## Overview
 This project is a physics-based simulation developed in Bevy, focused on the evolution of virtual creatures called "crabers". These crabers live in a 2D space and evolve over time through natural selection and genetic mutation.
 
+Run it now in your browser: [Here](https://ashirviskas.github.io/)
+
 ![image](https://github.com/ashirviskas/crabers/assets/11985242/305bbd40-010a-4609-90fa-cf8abb4da18a)
 
 
 
 ## Getting Started
+### Prerequisites
+
 1. Have rust and cargo installed.
 2. Clone the repo.
-3. Run `cargo run --release` in the root directory.
+
+
+### Building and running the game from source
+
+Running locally:
+
+1. Run `cargo run --release` in the root directory.
+
+Running in a browser:
+
+1. Run `rustup target install wasm32-unknown-unknown` to install the wasm target.
+2. Run `cargo install wasm-server-runner` to install the wasm server runner.
+3. Run `cargo run --target wasm32-unknown-unknown --release` to build the wasm build.
+
+Building a WASM build:
+1. Run `cargo build --release --target wasm32-unknown-unknown` to build the wasm build.
+2. Run `wasm-bindgen --out-dir ./out/ --target web ./target/` to generate the wasm bindings.
+3. Copy the `index.html` to the `out/` directory.
+4. Run some kind of web server in the `out/` directory. I use `python3 -m http.server`.
+
+
+
+### Running the wasm build
+
+
 
 ## Features roadmap
 - **Evolution:** Crabers evolve over time through natural selection and genetic mutation.
@@ -41,6 +69,9 @@ This project is a physics-based simulation developed in Bevy, focused on the evo
 - [x] Basic environment setup with food source spawning.
 - [ ] Simple reproduction mechanics without advanced features.
 - [ ] Cleanup and do all code `TODO`s.
+
+Nice to haves:
+- [ ] WASM Build
 
 ## Contributing
 Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us. TBD

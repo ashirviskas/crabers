@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Crabers Game</title>
+</head>
+<body>
+    <h1>Welcome to Crabers Game</h1>
+    <script type="module">
+        import init from './crabers.js';
+
+        async function loadWasm() {
+            try {
+                await init('./crabers_bg.wasm');
+                // The game should start as part of the WebAssembly module's initialization
+            } catch (err) {
+                console.error('Loading Wasm failed:', err);
+            }
+        }
+
+        loadWasm();
+    </script>
+</body>
+</html>
