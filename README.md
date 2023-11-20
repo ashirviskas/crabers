@@ -26,9 +26,21 @@ This project is a physics-based simulation developed in Bevy, focused on the evo
 ## PoC TODO
 - [x] Basic movement and collision physics for crabers.
 - [ ] Simple genetic system for craber traits.
-- [ ] Initial implementation of the neural brain with predefined inputs and outputs.
+- [ ] Initial implementation of the neural brain with predefined inputs and outputs
+  - [ ] Inputs:
+    - [ ] Relative speed
+    - [ ] Angle to nearest food
+    - [ ] Angle to nearest organism
+    - [ ] Genetic closeness
+    - [ ] Current energy level
+    - [ ] Health
+  - [ ] Outputs:
+    - [ ] Forward/backward acceleration
+    - [ ] Left/right acceleration
+    - [ ] Rotational acceleration (turning/steering)
 - [x] Basic environment setup with food source spawning.
 - [ ] Simple reproduction mechanics without advanced features.
+- [ ] Cleanup and do all code `TODO`s.
 
 ## Contributing
 Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us. TBD
