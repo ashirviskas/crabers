@@ -23,11 +23,16 @@ const FOOD_SPAWN_RATE: f32 = 0.01;
 const CRABER_SPAWN_RATE: f32 = 0.001;
 
 const WALL_THICKNESS: f32 = 60.0;
-const QUAD_TREE_CAPACITY: usize = 16;
+// const QUAD_TREE_CAPACITY: usize = 16;
 const RAVERS_TIMER: f32 = 0.2;
-const BUMPINESS_RANDOMNESS_STRENGTH: f32 = 0.01;
 const GRAVITY: f32 = 0.0;
 const DRAG: f32 = 0.01;
+
+#[cfg(target_arch = "wasm32")]
+const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = true;
+
+#[cfg(not(target_arch = "wasm32"))]
+const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = false;
 
 fn main() {
     App::new()
@@ -76,9 +81,13 @@ fn setup(mut commands: Commands) {
         height: WORLD_SIZE * 2.,
     };
     // setup
-
+    let grab_buttons = if ENABLE_LEFT_MOUSE_BUTTON_DRAG {
+        vec![MouseButton::Left, MouseButton::Right]
+    } else {
+        vec![MouseButton::Right]
+    };
     commands.spawn(Camera2dBundle::default()).insert(PanCam {
-        grab_buttons: vec![MouseButton::Right], // which buttons should drag the camera
+        grab_buttons: grab_buttons, // which buttons should drag the camera
         enabled: true,        // when false, controls are disabled. See toggle example.
         zoom_to_cursor: true, // whether to zoom towards the mouse or the center of the screen
         min_scale: 0.1,       // prevent the camera from zooming too far in
@@ -117,7 +126,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(WORLD_SIZE * 2.0, 5.0));
+        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -128,7 +137,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(WORLD_SIZE * 2.0, 5.0));
+        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -139,7 +148,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(5.0, WORLD_SIZE * 2.0));
+        .insert(Collider::cuboid(WALL_THICKNESS, WORLD_SIZE * 2.0));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -150,7 +159,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(5.0, WORLD_SIZE * 2.0));
+        .insert(Collider::cuboid(WALL_THICKNESS, WORLD_SIZE * 2.0));
 }
 
 fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {

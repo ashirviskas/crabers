@@ -1,6 +1,11 @@
 use bevy::prelude::*;
 
+// Constants for debug build
+#[cfg(not(target_arch = "wasm32"))]
 pub const WORLD_SIZE: f32 = 5000.0;
+
+#[cfg(target_arch = "wasm32")]
+pub const WORLD_SIZE: f32 = 3000.0;
 
 #[derive(Event)]
 pub struct DespawnEvent {
