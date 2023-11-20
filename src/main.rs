@@ -126,7 +126,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS));
+        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -137,7 +137,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS));
+        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -148,7 +148,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(WALL_THICKNESS, WORLD_SIZE * 2.0));
+        .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -159,7 +159,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(Collider::cuboid(WALL_THICKNESS, WORLD_SIZE * 2.0));
+        .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
 
 fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
