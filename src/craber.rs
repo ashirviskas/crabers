@@ -126,7 +126,7 @@ pub fn craber_spawner(
 
 // Make crabers lose energy over time
 pub fn energy_consumption(mut query: Query<(&mut Craber, &mut Velocity)>, time: Res<Time>) {
-    for (mut craber, mut velocity) in query.iter_mut() {
+    for (mut craber, _velocity) in query.iter_mut() {
         craber.energy -= ENERGY_CONSUMPTION_RATE * time.delta_seconds();
 
         // Handle low energy situations
@@ -144,7 +144,7 @@ pub fn ravers(
     mut timer: ResMut<RaversTimer>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
-        for (mut craber, mut velocity, mut sprite) in query.iter_mut() {
+        for (_craber, _velocity, mut sprite) in query.iter_mut() {
             // velocity.0 = velocity.0 * -1.0;
 
             sprite.color = Color::rgb(

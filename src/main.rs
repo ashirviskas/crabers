@@ -2,13 +2,12 @@ use bevy::{
     diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     time::{Timer, TimerMode},
-    utils::tracing::Event,
 };
 // use bevy_inspector_egui::quick::WorldInspectorPlugin;
 // use bevy_inspector_egui_rapier::InspectableRapierPlugin;
 use bevy_rapier2d::prelude::*;
 
-use rand::Rng;
+
 mod craber;
 use craber::*;
 
@@ -70,7 +69,7 @@ fn main() {
 }
 
 fn setup(mut commands: Commands) {
-    let boundary = Rectangle {
+    let _boundary = Rectangle {
         x: 0.0,
         y: 0.0,
         width: WORLD_SIZE * 2.,
@@ -154,7 +153,7 @@ fn setup(mut commands: Commands) {
         .insert(Collider::cuboid(5.0, WORLD_SIZE * 2.0));
 }
 
-fn setup_ui(mut commands: Commands, asset_server: Res<AssetServer>) {
+fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
     commands.spawn(TextBundle {
         text: Text::from_section(
             "No craber selected",
@@ -257,7 +256,7 @@ fn update_selected_entity_info(
 }
 
 fn quad_tree_update(
-    mut commands: Commands,
+    _commands: Commands,
     mut quadtree: ResMut<Quadtree>,
     mut craber_query: Query<(Entity, &EntityType, &mut Craber, &Transform)>,
     food_query: Query<(Entity, &EntityType, &Food, &Transform)>,
@@ -289,11 +288,11 @@ fn draw_quadtree_debug(
 // TODO: Make a separate despawn system for each entity type
 
 fn do_collision(
-    mut commands: Commands,
+    _commands: Commands,
     mut collide_event_reader: EventReader<CollisionEvent>,
-    mut query: Query<(Entity, &Transform, &EntityType)>,
+    query: Query<(Entity, &Transform, &EntityType)>,
     mut craber_query: Query<(Entity, &mut Craber)>,
-    mut food_query: Query<(Entity, &mut Food)>,
+    food_query: Query<(Entity, &mut Food)>,
     mut despawn_events: EventWriter<DespawnEvent>,
 ) {
     for collide_event in collide_event_reader.read() {
@@ -344,24 +343,24 @@ fn do_collision(
 fn do_despawning(
     mut commands: Commands,
     mut despawn_events: EventReader<DespawnEvent>,
-    mut craber_query: Query<(Entity)>,
+    mut craber_query: Query<Entity>,
 ) {
     for despawn_event in despawn_events.read() {
-        if let Ok(entity) = craber_query.get_mut(despawn_event.entity) {
+        if let Ok(_entity) = craber_query.get_mut(despawn_event.entity) {
             commands.entity(despawn_event.entity).despawn();
         }
     }
 }
 
-fn apply_drag(mut commands: Commands, mut query: Query<(Entity, &mut Velocity, &Weight)>) {
-    for (entity, mut velocity, weight) in query.iter_mut() {
+fn apply_drag(_commands: Commands, mut query: Query<(Entity, &mut Velocity, &Weight)>) {
+    for (_entity, mut velocity, weight) in query.iter_mut() {
         velocity.linvel *= 1.0 - DRAG * weight.weight;
         velocity.angvel *= 1.0 - DRAG * weight.weight;
     }
 }
 
 fn apply_acceleration(
-    mut commands: Commands,
+    _commands: Commands,
     mut query: Query<(Entity, &mut Velocity, &Acceleration, &Transform)>,
 ) {
     for (_, mut velocity, acceleration, transform) in query.iter_mut() {
