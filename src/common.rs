@@ -33,8 +33,22 @@ pub struct SelectedEntity {
     pub energy: f32,
 }
 
-// #[derive(Component)]
-// pub struct Velocity(pub Vec2);
+#[derive(Resource)]
+pub struct DebugInfo {
+    pub fps: f64,
+    pub entity_count: usize,
+    pub timer: Timer,
+}
+
+impl Default for DebugInfo {
+    fn default() -> Self {
+        DebugInfo {
+            fps: 0.0,
+            entity_count: 0,
+            timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+        }
+    }
+}
 
 pub fn collides(a: &Transform, b: &Transform, collision_threshold: f32) -> bool {
     // Simple AABB collision check

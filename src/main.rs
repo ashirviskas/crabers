@@ -1,12 +1,11 @@
 use bevy::{
-    diagnostic::{FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
+    diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     time::{Timer, TimerMode},
 };
 // use bevy_inspector_egui::quick::WorldInspectorPlugin;
 // use bevy_inspector_egui_rapier::InspectableRapierPlugin;
 use bevy_rapier2d::prelude::*;
-
 
 mod craber;
 use craber::*;
@@ -44,21 +43,15 @@ fn main() {
         // .add_plugins(InspectableRapierPlugin)
         // .add_plugins(WorldInspectorPlugin::default())
         .insert_resource(SelectedEntity::default())
+        .insert_resource(DebugInfo::default())
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, entity_selection)
         .add_systems(Update, update_selected_entity_info)
         .add_systems(Update, update_ui)
+        .add_systems(Update, update_debug_info)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
-        // .add_systems(Update, craber_movement)
-        // SAP
-        // .add_systems(Update, update_sap)
-        // .add_systems(Update, handle_collisions_sap)
-        // Quadtree
-        // .add_systems(Update, handle_collisions_quadtree)
-        // .add_systems(Update, quad_tree_update)
-        // other
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
         // .add_systems(Update, update_craber_color)
@@ -69,7 +62,6 @@ fn main() {
         .add_systems(Update, (apply_drag, apply_acceleration))
         // Fun and debug stuff
         // .add_systems(Update, ravers)
-        // .add_systems(Update, draw_quadtree_debug)
         .run();
 }
 
@@ -88,10 +80,10 @@ fn setup(mut commands: Commands) {
     };
     commands.spawn(Camera2dBundle::default()).insert(PanCam {
         grab_buttons: grab_buttons, // which buttons should drag the camera
-        enabled: true,        // when false, controls are disabled. See toggle example.
-        zoom_to_cursor: true, // whether to zoom towards the mouse or the center of the screen
-        min_scale: 0.1,       // prevent the camera from zooming too far in
-        max_scale: Some(40.), // prevent the camera from zooming too far out
+        enabled: true,              // when false, controls are disabled. See toggle example.
+        zoom_to_cursor: true,       // whether to zoom towards the mouse or the center of the screen
+        min_scale: 0.1,             // prevent the camera from zooming too far in
+        max_scale: Some(40.),       // prevent the camera from zooming too far out
         ..Default::default()
     });
     commands.insert_resource(FoodSpawnTimer(Timer::from_seconds(
@@ -164,14 +156,24 @@ fn setup(mut commands: Commands) {
 
 fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
     commands.spawn(TextBundle {
-        text: Text::from_section(
-            "No craber selected",
-            TextStyle {
-                font: Default::default(),
-                font_size: 30.0,
-                color: Color::WHITE,
+        text: Text::from_sections([
+            TextSection {
+                value: "No craber selected".to_string(),
+                style: TextStyle {
+                    font: Default::default(),
+                    font_size: 30.0,
+                    color: Color::WHITE,
+                },
             },
-        ),
+            TextSection {
+                value: "\nEntities: 0\nFps: 0.0".to_string(),
+                style: TextStyle {
+                    font: Default::default(),
+                    font_size: 30.0,
+                    color: Color::WHITE,
+                },
+            },
+        ]),
         // ... other properties ...
         ..Default::default()
     });
@@ -187,6 +189,34 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
         } else {
             text.sections[0].value = "No craber selected".to_string();
         }
+    }
+}
+
+fn update_debug_info(
+    mut debug_info: ResMut<DebugInfo>,
+    craber_query: Query<&Craber>,
+    food_query: Query<&Food>,
+    diagnostics: Res<DiagnosticsStore>,
+    time: Res<Time>,
+    mut query: Query<&mut Text>,
+) {
+    debug_info.entity_count = craber_query.iter().count() + food_query.iter().count();
+    let fps = diagnostics
+        .get(FrameTimeDiagnosticsPlugin::FPS)
+        .and_then(|x| x.average());
+
+    if let Some(fps) = fps {
+        debug_info.fps = fps;
+    } else {
+        debug_info.fps = 0.0;
+        return;
+    }
+
+    for mut text in query.iter_mut() {
+        text.sections[1].value = format!(
+            "\nEntity count: {}, \nFPS: {:.2}",
+            debug_info.entity_count, debug_info.fps
+        );
     }
 }
 
