@@ -197,7 +197,7 @@ fn update_debug_info(
     craber_query: Query<&Craber>,
     food_query: Query<&Food>,
     diagnostics: Res<DiagnosticsStore>,
-    time: Res<Time>,
+    _time: Res<Time>,
     mut query: Query<&mut Text>,
 ) {
     debug_info.entity_count = craber_query.iter().count() + food_query.iter().count();
