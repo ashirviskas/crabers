@@ -52,6 +52,7 @@ pub struct ReproduceEvent {
 pub struct SpawnEvent {
     pub position: Vec3,
     pub velocity: Velocity,
+    pub roation: Quat,
     pub craber: Craber,
 }
 
@@ -90,6 +91,7 @@ pub fn spawn_craber(
         let craber = event.craber;
         let position = event.position;
         let velocity = event.velocity;
+        let rotation = event.roation;
         let craber_texture = [
             CraberTexture::A,
             CraberTexture::B,
@@ -99,13 +101,13 @@ pub fn spawn_craber(
         ]
         .choose(&mut rng)
         .unwrap();
+        println!("Position: {:?}", position);
 
         commands
             .spawn(RigidBody::Dynamic)
             .insert(Collider::ball(CRABER_SIZE / 2.0))
             .insert(Restitution::coefficient(0.8))
             .insert(Name::new("Craber"))
-            .insert(TransformBundle::from(Transform::from_translation(position)))
             .insert(SpriteBundle {
                 sprite: Sprite {
                     color: Color::rgb(1.0, 1.0, 1.0),
@@ -113,6 +115,11 @@ pub fn spawn_craber(
                     ..Default::default()
                 },
                 texture: asset_server.load(craber_texture.path()),
+                transform: Transform {
+                    translation: position,
+                    rotation,
+                    ..Default::default()
+                },
                 ..Default::default()
             })
             .insert(craber)
@@ -141,9 +148,11 @@ pub fn craber_spawner(
         let velocity: Velocity = Velocity::linear(
             Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR,
         );
+        let rotation = Quat::from_rotation_z(rng.gen_range(0.0..std::f32::consts::PI * 2.0));
         spawn_events.send(SpawnEvent {
             position,
             velocity,
+            roation: rotation,
             craber: Craber {
                 max_energy: 100.0,
                 max_health: 100.0,
@@ -190,9 +199,13 @@ pub fn craber_reproduce(
         let position = craber.1.translation + position_offset.extend(0.0);
         println!("Parent position: {:?}", craber.1.translation);
         craber.0.energy -= CRABER_REPRODUCE_ENERGY;
+
+        // Rotation 180 degrees from parent
+        let rotation = Quat::from_rotation_z(parent_angle + std::f32::consts::PI);
         spawn_events.send(SpawnEvent {
             position,
             velocity,
+            roation: rotation,
             craber: Craber {
                 max_energy: 100.0,
                 max_health: 100.0,
