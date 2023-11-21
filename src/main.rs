@@ -19,7 +19,7 @@ use common::*;
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.01;
-const CRABER_SPAWN_RATE: f32 = 0.001;
+const CRABER_SPAWN_RATE: f32 = 0.3;
 
 const WALL_THICKNESS: f32 = 60.0;
 // const QUAD_TREE_CAPACITY: usize = 16;
@@ -44,6 +44,9 @@ fn main() {
         // .add_plugins(WorldInspectorPlugin::default())
         .insert_resource(SelectedEntity::default())
         .insert_resource(DebugInfo::default())
+        .add_event::<DespawnEvent>()
+        .add_event::<SpawnEvent>()
+        .add_event::<ReproduceEvent>()
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, entity_selection)
@@ -54,11 +57,12 @@ fn main() {
         .add_systems(Update, craber_spawner)
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
+        .add_systems(Update, craber_reproduce)
         // .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
-        .add_event::<DespawnEvent>()
         .add_systems(Update, do_collision)
         .add_systems(Update, do_despawning)
+        .add_systems(Update, spawn_craber)
         .add_systems(Update, (apply_drag, apply_acceleration))
         // Fun and debug stuff
         // .add_systems(Update, ravers)
