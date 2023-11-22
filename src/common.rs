@@ -99,6 +99,7 @@ pub struct ForceApplicationTimer(pub Timer);
 pub enum EntityType {
     Craber,
     Food,
+    Vision,
 }
 
 #[derive(Component, Debug)]
@@ -377,5 +378,18 @@ impl Quadtree {
             self.southeast.as_ref().unwrap().draw(commands);
             self.southwest.as_ref().unwrap().draw(commands);
         }
+    }
+}
+
+pub fn full_angle_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
+    let angle = v1.angle_between(v2); // Smallest angle in radians
+    let cross = v1.cross(v2); // Cross product
+
+    if cross.z < 0.0 {
+        // Clockwise direction
+        2.0 * std::f32::consts::PI - angle
+    } else {
+        // Counterclockwise direction
+        angle
     }
 }

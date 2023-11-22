@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NeuronType {
     // Input
     AlwaysOn,
@@ -22,7 +22,7 @@ pub enum NeuronType {
     ModifyBrainInterval,
 }
 
-#[derive(PartialEq, Eq, Hash, Clone, Copy)]
+#[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum ActivationFunction {
     None,
     Sigmoid,
@@ -47,7 +47,7 @@ impl ActivationFunction {
     }
 }
 
-#[derive(PartialEq, Clone, Copy)]
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub struct Neuron {
     pub neuron_type: NeuronType,
     // Optional activation function. If none is provided, the value is used directly.
@@ -114,7 +114,7 @@ impl Brain {
             },
             // Angle to hidden
             Connection {
-                from_id: 0,
+                from_id: 1,
                 to_id: 100,
                 weight: 1.0,
                 bias: 0.0,
@@ -124,7 +124,7 @@ impl Brain {
             Connection {
                 from_id: 100,
                 to_id: 201,
-                weight: 1.0,
+                weight: 4.0, // To make it rotate harder
                 bias: 0.0,
                 enabled: true,
             },
@@ -158,10 +158,9 @@ impl Brain {
         }
     }
 
-    // Turns angle into normalized value between -1.0 and 1.0
-    pub fn angle_to_normalized_value(angle_degrees: f32) -> f32 {
-        let angle_radians = angle_degrees.to_radians();
-        angle_radians.sin()
+    // Makes radians negative if the angle is above PI.
+    pub fn angle_to_normalized_value(angle_radians: f32) -> f32 {
+        angle_radians - std::f32::consts::PI
     }
 
     pub fn update_input(&mut self, input_neuron_type: NeuronType, value: f32) {
@@ -172,16 +171,6 @@ impl Brain {
         }
     }
 
-    // pub fn update_neuron(&mut self, neuron_id: usize, value: f32) {
-    //     if neuron_id < 100 {
-    //         self.inputs[neuron_id].value = value;
-    //     } else if neuron_id < 200 {
-    //         self.hidden_layers[neuron_id - 100].value = value;
-    //     } else if neuron_id < 300 {
-    //         self.outputs[neuron_id - 200].value = value;
-    //     }
-    // }
-
     pub fn get_input_types(&self) -> Vec<NeuronType> {
         let mut input_types = Vec::new();
         for neuron in self.inputs.iter() {
@@ -190,18 +179,24 @@ impl Brain {
         input_types
     }
 
+    pub fn get_rotation(&self) -> f32 {
+        let mut rotation = 0.0;
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::Rotate {
+                rotation = neuron.value;
+            }
+        }
+        rotation
+    }
+
     pub fn feed_forward(&mut self) {
-        // Reset non input neuron values (possibly not)
-        // for neuron in self.hidden_layers.iter_mut() {
-        //     neuron.value = 0.0;
-        // }
-        // for neuron in self.outputs.iter_mut() {
-        //     neuron.value = 0.0;
-        // }
-        // Feed forward
+        // Input to hidden
         for connection_id in 0..self.connections.len() {
             let connection = &self.connections[connection_id];
             if !connection.enabled {
+                continue;
+            }
+            if connection.from_id > 100 {
                 continue;
             }
             let from_neuron = self.get_neuron(connection.from_id).unwrap();
@@ -216,12 +211,75 @@ impl Brain {
             self.set_neuron(connection.to_id, new_to_neuron);
             // self.update_neuron(connection.to_id, new_to_neuron_value);
         }
-        // Activate
+        // Hidden functions
         for neuron in self.hidden_layers.iter_mut() {
             neuron.value = neuron.activation_function.calculate(neuron.value);
         }
+        // Hidden to output
+        for connection_id in 0..self.connections.len() {
+            let connection = &self.connections[connection_id];
+            if !connection.enabled {
+                continue;
+            }
+            if connection.from_id < 100 || connection.from_id > 200 {
+                continue;
+            }
+            let from_neuron = self.get_neuron(connection.from_id).unwrap();
+            let to_neuron = self.get_neuron(connection.to_id).unwrap().clone();
+            // to_neuron.value += from_neuron.value * connection.weight + connection.bias;
+            let new_to_neuron_value = from_neuron.value * connection.weight + connection.bias;
+            let new_to_neuron = Neuron {
+                neuron_type: to_neuron.neuron_type,
+                activation_function: to_neuron.activation_function,
+                value: new_to_neuron_value,
+            };
+            self.set_neuron(connection.to_id, new_to_neuron);
+            // self.update_neuron(connection.to_id, new_to_neuron_value);
+        }
         for neuron in self.outputs.iter_mut() {
             neuron.value = neuron.activation_function.calculate(neuron.value);
+        }
+    }
+
+    pub fn print_brain(&self) {
+        if self.outputs[1].value != 0.0 {
+            println!("Angling");
+        } else {
+            return;
+        }
+        println!("\n");
+        println!("Brain:\n");
+        println!("Inputs:");
+        for neuron in self.inputs.iter() {
+            println!(
+                "Neuron type: {:?}, Activation function: {:?}, Value: {}",
+                neuron.neuron_type, neuron.activation_function, neuron.value
+            );
+        }
+        println!("Hidden:");
+        for neuron in self.hidden_layers.iter() {
+            println!(
+                "Neuron type: {:?}, Activation function: {:?}, Value: {}",
+                neuron.neuron_type, neuron.activation_function, neuron.value
+            );
+        }
+        println!("Outputs:");
+        for neuron in self.outputs.iter() {
+            println!(
+                "Neuron type: {:?}, Activation function: {:?}, Value: {}",
+                neuron.neuron_type, neuron.activation_function, neuron.value
+            );
+        }
+        println!("Connections:");
+        for connection in self.connections.iter() {
+            println!(
+                "From: {}, To: {}, Weight: {}, Bias: {}, Enabled: {}",
+                connection.from_id,
+                connection.to_id,
+                connection.weight,
+                connection.bias,
+                connection.enabled
+            );
         }
     }
 }
@@ -233,6 +291,7 @@ pub struct VisionUpdateTimer(pub Timer);
 #[derive(Component)]
 pub struct Vision {
     pub radius: f32,
-    pub nearest_food_angle: f32,
+    pub nearest_food_angle_radians: f32,
+    pub nearest_food_distance: f32,
     pub see_food: bool,
 }

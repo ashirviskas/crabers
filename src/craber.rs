@@ -1,6 +1,4 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
-use bevy_rapier2d::na::Translation;
-// use bevy_rapier2d::prelude::*;
 use bevy_xpbd_2d::prelude::*;
 
 use rand::prelude::SliceRandom;
@@ -158,7 +156,8 @@ pub fn spawn_craber(
             .id();
         let vision = Vision {
             radius: 100.0,
-            nearest_food_angle: 0.0,
+            nearest_food_angle_radians: 0.0,
+            nearest_food_distance: 0.0,
             see_food: false,
         };
         let rand_pretty_color = Color::rgb(
@@ -189,6 +188,7 @@ pub fn spawn_craber(
             })
             .insert(CollisionLayers::new([Layer::Vision], [Layer::Food]))
             .insert(vision)
+            .insert(EntityType::Vision)
             .id();
 
         commands.entity(craber).push_children(&[craber_vision]);

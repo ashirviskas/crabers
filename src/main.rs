@@ -22,14 +22,13 @@ use bevy_pancam::{PanCam, PanCamPlugin};
 use common::*;
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
-const FOOD_SPAWN_RATE: f32 = 0.05;
+const FOOD_SPAWN_RATE: f32 = 0.01;
 const CRABER_SPAWN_RATE: f32 = 0.1;
 
 const WALL_THICKNESS: f32 = 60.0;
 // const QUAD_TREE_CAPACITY: usize = 16;
 const RAVERS_TIMER: f32 = 0.2;
 const GRAVITY: f32 = 0.0;
-const DRAG: f32 = 0.01;
 
 const FORCE_APPLICATION_RATE: f32 = 0.5;
 
@@ -87,7 +86,9 @@ fn main() {
         .add_systems(Update, do_collision)
         .add_systems(Update, do_despawning)
         .add_systems(Update, spawn_craber)
-        .add_systems(Update, (apply_acceleration))
+        .add_systems(Update, apply_acceleration)
+        .add_systems(Update, vision_update)
+        .add_systems(Update, brain_update)
         // Fun and debug stuff
         // .add_systems(Update, ravers)
         .run();
@@ -140,10 +141,6 @@ fn setup(mut commands: Commands) {
         TimerMode::Repeating,
     )));
 
-    // commands.insert_resource(RapierConfiguration {
-    //     gravity: Vect::new(0.0, GRAVITY),
-    //     ..Default::default()
-    // });
     commands.insert_resource(Gravity(Vec2::NEG_Y * GRAVITY));
 
     commands
@@ -156,7 +153,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
@@ -169,7 +166,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
@@ -182,7 +179,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
     commands
@@ -195,7 +192,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
@@ -359,26 +356,14 @@ fn quad_tree_update(
     }
 }
 
-fn draw_quadtree_debug(
-    mut commands: Commands,
-    quadtree: Res<Quadtree>,
-    debug_rectangles: Query<Entity, With<DebugRectangle>>,
-) {
-    for entity in debug_rectangles.iter() {
-        commands.entity(entity).despawn();
-    }
-    quadtree.draw(&mut commands);
-}
-
-// TODO: Make a separate despawn system for each entity type
-
 fn do_collision(
     _commands: Commands,
     mut collide_event_reader: EventReader<CollisionStarted>,
     query: Query<(Entity, &Transform, &EntityType)>,
     mut craber_query: Query<(Entity, &mut Craber)>,
-    food_query: Query<(Entity, &mut Food)>,
+    food_query: Query<(Entity, &mut Food, &Transform)>,
     mut despawn_events: EventWriter<DespawnEvent>,
+    mut vision_query: Query<(&mut Vision, &Transform)>,
 ) {
     for collide_event in collide_event_reader.read() {
         let entity1 = collide_event.0;
@@ -408,6 +393,23 @@ fn do_collision(
                             }
                         }
                     }
+                    // (EntityType::Vision, EntityType::Food) => {
+                    //     if let Ok(mut vision) = vision_query.get_mut(entity1) {
+                    //         if let Ok(food) = food_query.get(entity2) {
+                    //             let food_distance = (vision.1.translation - food.2.translation)
+                    //                 .length();
+                    //             if food_distance < vision.0.nearest_food_distance {
+                    //                 vision.0.nearest_food_distance = food_distance;
+                    //                 vision.0.nearest_food_angle = vision.1.translation
+                    //                     .angle_between(food.2.translation);
+                    //                 vision.0.see_food = true;
+                    //                 println!("Food seen!");
+                    //                 println!("Angle: {}", vision.0.nearest_food_angle);
+                    //                 println!("Distance: {}", vision.0.nearest_food_distance);
+                    //             }
+                    //         }
+                    //     }
+                    // }
                     _ => {}
                 }
             }
@@ -427,21 +429,16 @@ fn do_despawning(
     }
 }
 
-// fn apply_drag(_commands: Commands, mut query: Query<(Entity, &mut LinearVelocity, &Weight)>) {
-//     for (_entity, mut velocity, weight) in query.iter_mut() {
-//         velocity.0 *= 1.0 - DRAG * weight.weight;
-//         velocity.0 *= 1.0 - DRAG * weight.weight;
-//     }
-// }
-
 fn apply_acceleration(
     _commands: Commands,
     mut query: Query<(
         Entity,
         &mut LinearVelocity,
+        &mut AngularVelocity,
         &Acceleration,
         &Transform,
         &mut ExternalForce,
+        &Brain,
     )>,
     time: Res<Time>,
     mut timer: ResMut<ForceApplicationTimer>,
@@ -449,64 +446,101 @@ fn apply_acceleration(
     if !timer.0.tick(time.delta()).just_finished() {
         return;
     }
-    for (_, mut velocity, acceleration, transform, mut external_force) in query.iter_mut() {
-        // velocity.linvel += acceleration.0;
-        // let forward = transform.rotation.mul_vec3(acceleration.0.extend(0.0));
-        // // Convert the rotated vector back to 2D
-        // let rotated_forward_2d = Vec2::new(forward.x, forward.y);
-        // let acceleration_vector = rotated_forward_2d;
-        // // println!("Acceleration vector: {:?}", acceleration_vector);
-        // // println!("Velocity: {:?}", velocity.linvel);
-        // velocity.0 += acceleration_vector;
-        // println!("Velocity: {:?}", velocity.linvel);
-        // let transform_rotation = Transform::from_rotation(transform.rotation);
-        // println!("Force before: {:?}", external_force);
+    for (
+        _,
+        mut linear_velocity,
+        mut angular_velocity,
+        acceleration,
+        transform,
+        mut external_force,
+        brain,
+    ) in query.iter_mut()
+    {
         let force = transform
             .rotation
             .mul_vec3(acceleration.0.extend(0.0) * 100.);
         let force_2d = Vec2::new(force.x, force.y);
-        velocity.0 = force_2d;
-        // external_force.set_force(force_2d);
-        // external_force.with_persistence(true);
-        // println!("Force after: {:?}", external_force);
+        linear_velocity.0 = force_2d;
+        let rotation_vector = brain.get_rotation();
+        angular_velocity.0 = rotation_vector;
+        // println!("Rotation vector: {}", rotation_vector);
     }
 }
 
-// pub fn vision_update(
-//     mut query: Query<(Entity, &mut Vision,
-//     mut timer: ResMut<VisionUpdateTimer>,
-//     mut spatial_query: SpatialQuery,
-//     time: Res<Time>,
-// ) {
-//     if !timer.0.tick(time.delta()).just_finished() {
-//         return;
-//     }
-//     for (entity, mut vision
-//         let intersections = spatial_query.shape_hits(point, vision)
-//         vision.nearest_food_angle = None;
-//         vision.see_food = false;
-//     }
-// }
+pub fn vision_update(
+    spatial_query: SpatialQuery,
+    mut query: Query<(&mut Vision, &Transform, &Collider, &Parent)>,
+    entity_transform_query: Query<&Transform>,
+) {
+    for (mut vision, _, collider, parent) in query.iter_mut() {
+        let craber_transform = entity_transform_query.get(parent.get()).unwrap();
+        let intersections_entities = spatial_query.shape_intersections(
+            &collider,
+            craber_transform.translation.truncate(),
+            0.,
+            SpatialQueryFilter {
+                masks: Layer::Food.to_bits(),
+                ..Default::default()
+            },
+        );
+        vision.see_food = false;
+        if intersections_entities.is_empty() {
+            continue;
+        }
+        let mut nearest_food_distance = 1000.0;
+        let mut nearest_food_angle = 0.0;
+        for intersection in intersections_entities.iter() {
+            let food_transform = match entity_transform_query.get(*intersection) {
+                Ok(transform) => transform,
+                Err(_) => {
+                    continue;
+                }
+            };
+            let food_distance =
+                (food_transform.translation - craber_transform.translation).length();
+            if food_distance < nearest_food_distance {
+                nearest_food_distance = food_distance;
+                // nearest_food_angle = food_transform.translation.angle_between(craber_transform.translation);
+                let food_direction = food_transform.translation - craber_transform.translation;
+                let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
+                // nearest_food_angle = craber_direction.angle_between(food_direction);
+                nearest_food_angle = full_angle_between_vectors(craber_direction, food_direction);
+            }
+        }
+        if nearest_food_distance == 1000.0 {
+            vision.see_food = false;
+            continue;
+        }
+        // println!("Nearest food distance: {}", nearest_food_distance);
+        // println!("Nearest food angle: {}", nearest_food_angle);
+        vision.nearest_food_distance = nearest_food_distance;
+        vision.nearest_food_angle_radians = nearest_food_angle;
+        vision.see_food = true;
+    }
+}
 
-// pub fn brain_update(
-//     mut query: Query<(&mut Brain, &mut Craber)>,
-//     time: Res<Time>,
-// ) {
-//     for (mut brain, mut craber) in query.iter_mut() {
-//         // Get brain input types
-//         let input_types = brain.get_input_types();
-//         // Update inputs
-//         for input_type in input_types {
-//             match input_type {
-//                 NeuronType::NearestFoodAngle => {
-//                     brain.update_input(
-//                         input_type,
-//                         Brain::angle_to_normalized_value(
-//                             craber.nearest_food_angle.unwrap_or(0.0),
-//                         ),
-//                     );
-//                 }
-//             }
-//         }
-//     }
-// }
+pub fn brain_update(
+    mut query: Query<(&mut Brain, &mut Craber, &Children)>,
+    vision_query: Query<(&Vision, &Transform)>,
+    time: Res<Time>,
+) {
+    for (mut brain, mut craber, children) in query.iter_mut() {
+        // Get brain input types
+        let input_types = brain.get_input_types();
+        // Update inputs
+        if vision_query.get(children[0]).unwrap().0.see_food {
+            brain.update_input(
+                NeuronType::NearestFoodAngle,
+                vision_query
+                    .get(children[0])
+                    .unwrap()
+                    .0
+                    .nearest_food_angle_radians,
+            );
+        } else {
+            brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
+        }
+        brain.feed_forward();
+        // brain.print_brain();
+    }
+}
