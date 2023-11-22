@@ -1,11 +1,20 @@
 use bevy::prelude::*;
 
+use bevy_xpbd_2d::prelude::*;
+
+// Define the collision layers
+#[derive(PhysicsLayer)]
+pub enum Layer {
+    Blue,
+    Red,
+}
+
 // Constants for debug build
 #[cfg(not(target_arch = "wasm32"))]
-pub const WORLD_SIZE: f32 = 5000.0;
+pub const WORLD_SIZE: f32 = 10000.0;
 
 #[cfg(target_arch = "wasm32")]
-pub const WORLD_SIZE: f32 = 3000.0;
+pub const WORLD_SIZE: f32 = 10000.0;
 
 #[derive(Event)]
 pub struct DespawnEvent {
@@ -79,6 +88,9 @@ pub fn print_current_entity_count(
         println!("Current entity count: {}", query.iter().count());
     }
 }
+
+#[derive(Resource)]
+pub struct ForceApplicationTimer(pub Timer);
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub enum EntityType {

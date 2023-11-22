@@ -5,7 +5,8 @@ use bevy::{
 };
 // use bevy_inspector_egui::quick::WorldInspectorPlugin;
 // use bevy_inspector_egui_rapier::InspectableRapierPlugin;
-use bevy_rapier2d::prelude::*;
+// use bevy_rapier2d::prelude::*;
+use bevy_xpbd_2d::prelude::*;
 
 mod craber;
 use craber::*;
@@ -18,14 +19,16 @@ use bevy_pancam::{PanCam, PanCamPlugin};
 use common::*;
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
-const FOOD_SPAWN_RATE: f32 = 0.01;
-const CRABER_SPAWN_RATE: f32 = 0.3;
+const FOOD_SPAWN_RATE: f32 = 0.05;
+const CRABER_SPAWN_RATE: f32 = 0.1;
 
 const WALL_THICKNESS: f32 = 60.0;
 // const QUAD_TREE_CAPACITY: usize = 16;
 const RAVERS_TIMER: f32 = 0.2;
 const GRAVITY: f32 = 0.0;
 const DRAG: f32 = 0.01;
+
+const FORCE_APPLICATION_RATE: f32 = 0.5;
 
 #[cfg(target_arch = "wasm32")]
 const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = true;
@@ -35,11 +38,27 @@ const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = false;
 
 fn main() {
     App::new()
-        .add_plugins(DefaultPlugins)
+        .add_plugins(DefaultPlugins.set(WindowPlugin {
+            primary_window: Some(Window {
+                // present_mode: PresentMode::AutoNoVsync, // Reduces input lag.
+                fit_canvas_to_parent: true,
+                ..default()
+            }),
+            ..default()
+        }))
         .add_plugins(PanCamPlugin)
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
-        .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(10.0))
+        // .add_plugins(WindowPlugin{
+        //     primary_window: Some(Window {
+        //         resolution: (1920., 1080.).into(),
+        //         title: "Crabers".to_string(),
+        //         ..default()
+        //     }),
+        //     ..default()
+        // })
+        // .add_plugins(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(10.0))
+        .add_plugins(PhysicsPlugins::default())
         // .add_plugins(InspectableRapierPlugin)
         // .add_plugins(WorldInspectorPlugin::default())
         .insert_resource(SelectedEntity::default())
@@ -63,7 +82,7 @@ fn main() {
         .add_systems(Update, do_collision)
         .add_systems(Update, do_despawning)
         .add_systems(Update, spawn_craber)
-        .add_systems(Update, (apply_drag, apply_acceleration))
+        .add_systems(Update, (apply_acceleration))
         // Fun and debug stuff
         // .add_systems(Update, ravers)
         .run();
@@ -106,11 +125,16 @@ fn setup(mut commands: Commands) {
         RAVERS_TIMER,
         TimerMode::Repeating,
     )));
+    commands.insert_resource(ForceApplicationTimer(Timer::from_seconds(
+        FORCE_APPLICATION_RATE,
+        TimerMode::Repeating,
+    )));
 
-    commands.insert_resource(RapierConfiguration {
-        gravity: Vect::new(0.0, GRAVITY),
-        ..Default::default()
-    });
+    // commands.insert_resource(RapierConfiguration {
+    //     gravity: Vect::new(0.0, GRAVITY),
+    //     ..Default::default()
+    // });
+    commands.insert_resource(Gravity(Vec2::NEG_Y * GRAVITY));
 
     commands
         .spawn(SpriteBundle {
@@ -122,6 +146,8 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
             ..Default::default()
         })
+        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(RigidBody::Static)
         .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
         .spawn(SpriteBundle {
@@ -133,6 +159,8 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
             ..Default::default()
         })
+        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(RigidBody::Static)
         .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
         .spawn(SpriteBundle {
@@ -144,6 +172,8 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
+        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(RigidBody::Static)
         .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
     commands
         .spawn(SpriteBundle {
@@ -155,6 +185,8 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
+        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(RigidBody::Static)
         .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
 
@@ -332,52 +364,42 @@ fn draw_quadtree_debug(
 
 fn do_collision(
     _commands: Commands,
-    mut collide_event_reader: EventReader<CollisionEvent>,
+    mut collide_event_reader: EventReader<CollisionStarted>,
     query: Query<(Entity, &Transform, &EntityType)>,
     mut craber_query: Query<(Entity, &mut Craber)>,
     food_query: Query<(Entity, &mut Food)>,
     mut despawn_events: EventWriter<DespawnEvent>,
 ) {
     for collide_event in collide_event_reader.read() {
-        // Check if event Started or Stopped
-        if let CollisionEvent::Started(_, _, _) = collide_event {
-            // println!("Collision started");
-        } else {
-            // println!("Collision stopped");
-            continue;
-        }
-        if let CollisionEvent::Started(entity1, entity2, _) = collide_event {
-            let (entity1_type, entity2_type) = match query.get(*entity1) {
-                Ok(entity1) => match query.get(*entity2) {
-                    Ok(entity2) => (entity1.2, entity2.2),
-                    Err(_) => continue,
-                },
-                Err(_) => continue,
-            };
+        let entity1 = collide_event.0;
+        let entity2 = collide_event.1;
 
-            match (entity1_type, entity2_type) {
-                (EntityType::Craber, EntityType::Craber) => {
-                    continue;
-                }
-                (EntityType::Craber, EntityType::Food) => {
-                    if let Ok(mut craber) = craber_query.get_mut(*entity1) {
-                        if let Ok(food) = food_query.get(*entity2) {
-                            craber.1.energy += food.1.energy_value;
-                            // commands.entity(*entity2).despawn();
-                            despawn_events.send(DespawnEvent { entity: *entity2 });
+        if let Ok((entity1, _, entity1_type)) = query.get(entity1) {
+            if let Ok((entity2, _, entity2_type)) = query.get(entity2) {
+                match (entity1_type, entity2_type) {
+                    (EntityType::Craber, EntityType::Craber) => {
+                        continue;
+                    }
+                    (EntityType::Craber, EntityType::Food) => {
+                        if let Ok(mut craber) = craber_query.get_mut(entity1) {
+                            if let Ok(food) = food_query.get(entity2) {
+                                craber.1.energy += food.1.energy_value;
+                                // commands.entity(*entity2).despawn();
+                                despawn_events.send(DespawnEvent { entity: entity2 });
+                            }
                         }
                     }
-                }
-                (EntityType::Food, EntityType::Craber) => {
-                    if let Ok(mut craber) = craber_query.get_mut(*entity2) {
-                        if let Ok(food) = food_query.get(*entity1) {
-                            craber.1.energy += food.1.energy_value;
-                            // commands.entity(*entity1).despawn();
-                            despawn_events.send(DespawnEvent { entity: *entity1 });
+                    (EntityType::Food, EntityType::Craber) => {
+                        if let Ok(mut craber) = craber_query.get_mut(entity2) {
+                            if let Ok(food) = food_query.get(entity1) {
+                                craber.1.energy += food.1.energy_value;
+                                // commands.entity(*entity1).despawn();
+                                despawn_events.send(DespawnEvent { entity: entity1 });
+                            }
                         }
                     }
+                    _ => {}
                 }
-                _ => {}
             }
         }
     }
@@ -395,26 +417,47 @@ fn do_despawning(
     }
 }
 
-fn apply_drag(_commands: Commands, mut query: Query<(Entity, &mut Velocity, &Weight)>) {
-    for (_entity, mut velocity, weight) in query.iter_mut() {
-        velocity.linvel *= 1.0 - DRAG * weight.weight;
-        velocity.angvel *= 1.0 - DRAG * weight.weight;
-    }
-}
+// fn apply_drag(_commands: Commands, mut query: Query<(Entity, &mut LinearVelocity, &Weight)>) {
+//     for (_entity, mut velocity, weight) in query.iter_mut() {
+//         velocity.0 *= 1.0 - DRAG * weight.weight;
+//         velocity.0 *= 1.0 - DRAG * weight.weight;
+//     }
+// }
 
 fn apply_acceleration(
     _commands: Commands,
-    mut query: Query<(Entity, &mut Velocity, &Acceleration, &Transform)>,
+    mut query: Query<(
+        Entity,
+        &mut LinearVelocity,
+        &Acceleration,
+        &Transform,
+        &mut ExternalForce,
+    )>,
+    time: Res<Time>,
+    mut timer: ResMut<ForceApplicationTimer>,
 ) {
-    for (_, mut velocity, acceleration, transform) in query.iter_mut() {
+    if !timer.0.tick(time.delta()).just_finished() {
+        return;
+    }
+    for (_, mut velocity, acceleration, transform, mut external_force) in query.iter_mut() {
         // velocity.linvel += acceleration.0;
-        let forward = transform.rotation.mul_vec3(acceleration.0.extend(0.0));
-        // Convert the rotated vector back to 2D
-        let rotated_forward_2d = Vec2::new(forward.x, forward.y);
-        let acceleration_vector = rotated_forward_2d;
-        // println!("Acceleration vector: {:?}", acceleration_vector);
+        // let forward = transform.rotation.mul_vec3(acceleration.0.extend(0.0));
+        // // Convert the rotated vector back to 2D
+        // let rotated_forward_2d = Vec2::new(forward.x, forward.y);
+        // let acceleration_vector = rotated_forward_2d;
+        // // println!("Acceleration vector: {:?}", acceleration_vector);
+        // // println!("Velocity: {:?}", velocity.linvel);
+        // velocity.0 += acceleration_vector;
         // println!("Velocity: {:?}", velocity.linvel);
-        velocity.linvel += acceleration_vector;
-        // println!("Velocity: {:?}", velocity.linvel);
+        // let transform_rotation = Transform::from_rotation(transform.rotation);
+        // println!("Force before: {:?}", external_force);
+        let force = transform
+            .rotation
+            .mul_vec3(acceleration.0.extend(0.0) * 100.);
+        let force_2d = Vec2::new(force.x, force.y);
+        velocity.0 = force_2d;
+        // external_force.set_force(force_2d);
+        // external_force.with_persistence(true);
+        // println!("Force after: {:?}", external_force);
     }
 }

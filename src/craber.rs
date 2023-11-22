@@ -1,16 +1,22 @@
 use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
+// use bevy_rapier2d::prelude::*;
+use bevy_xpbd_2d::prelude::*;
 
 use rand::prelude::SliceRandom;
 use rand::Rng;
 
 use crate::common::*;
 
-const ENERGY_CONSUMPTION_RATE: f32 = 0.5;
+const ENERGY_CONSUMPTION_RATE: f32 = 0.15;
+const CRABER_MASS: f32 = 0.5;
+const CRABER_INERTIA: f32 = 0.05;
+const CRABER_ANGULAR_DAMPING: f32 = 0.9;
 pub const SPEED_FACTOR: f32 = 100.0;
 pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
-pub const CRABER_REPRODUCE_ENERGY: f32 = 50.0;
+pub const CRABER_REPRODUCE_ENERGY: f32 = 20.0;
+pub const MAX_CRABERS: usize = 20000;
+pub const CRABER_SPAWN_MULTIPLIER: usize = 5;
 pub enum CraberTexture {
     A,
     B,
@@ -51,7 +57,7 @@ pub struct ReproduceEvent {
 #[derive(Event)]
 pub struct SpawnEvent {
     pub position: Vec3,
-    pub velocity: Velocity,
+    // pub velocity: Velocity,
     pub roation: Quat,
     pub craber: Craber,
 }
@@ -76,7 +82,7 @@ pub fn update_craber_color(mut query: Query<(&Craber, &mut Sprite)>) {
 pub fn despawn_dead_crabers(mut commands: Commands, query: Query<(Entity, &Craber)>) {
     for (entity, craber) in query.iter() {
         if craber.health <= 0.0 {
-            commands.entity(entity).despawn();
+            commands.entity(entity).despawn_recursive();
         }
     }
 }
@@ -85,12 +91,16 @@ pub fn spawn_craber(
     mut commands: Commands,
     asset_server: Res<AssetServer>,
     mut spawn_events: EventReader<SpawnEvent>,
+    crabers_query: Query<&Craber>,
 ) {
+    if crabers_query.iter().len() >= MAX_CRABERS {
+        return;
+    }
     let mut rng = rand::thread_rng();
     for event in spawn_events.read() {
         let craber = event.craber;
         let position = event.position;
-        let velocity = event.velocity;
+        // let velocity = event.velocity;
         let rotation = event.roation;
         let craber_texture = [
             CraberTexture::A,
@@ -101,12 +111,16 @@ pub fn spawn_craber(
         ]
         .choose(&mut rng)
         .unwrap();
-        println!("Position: {:?}", position);
+        // println!("Position: {:?}", position);
 
         commands
             .spawn(RigidBody::Dynamic)
             .insert(Collider::ball(CRABER_SIZE / 2.0))
-            .insert(Restitution::coefficient(0.8))
+            .insert(ColliderDensity(2.5))
+            .insert(Mass(CRABER_MASS))
+            .insert(Inertia(CRABER_INERTIA))
+            .insert(Restitution::new(0.8))
+            .insert(AngularDamping(CRABER_ANGULAR_DAMPING))
             .insert(Name::new("Craber"))
             .insert(SpriteBundle {
                 sprite: Sprite {
@@ -124,10 +138,13 @@ pub fn spawn_craber(
             })
             .insert(craber)
             .insert(SelectableEntity::Craber)
-            .insert(velocity)
+            // .insert(velocity)
             .insert(Weight { weight: 1.0 })
             .insert(Acceleration(Vec2::new(0.0, -1.0)))
-            .insert(ActiveEvents::COLLISION_EVENTS)
+            .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+            // .insert(ActiveEvents::COLLISION_EVENTS)
+            // .insert(ExternalForce::new(Vec2::Y).with_persistence(true),)
+            .insert(Friction::new(0.3))
             .insert(EntityType::Craber);
     }
 }
@@ -138,34 +155,36 @@ pub fn craber_spawner(
     mut spawn_events: EventWriter<SpawnEvent>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
-        let mut rng = rand::thread_rng();
-        let position = Vec3::new(
-            rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
-            rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
-            0.0,
-        );
-        // let velocity = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR;
-        let velocity: Velocity = Velocity::linear(
-            Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR,
-        );
-        let rotation = Quat::from_rotation_z(rng.gen_range(0.0..std::f32::consts::PI * 2.0));
-        spawn_events.send(SpawnEvent {
-            position,
-            velocity,
-            roation: rotation,
-            craber: Craber {
-                max_energy: 100.0,
-                max_health: 100.0,
-                energy: 100.0,
-                health: 100.0,
-            },
-        });
+        for _ in 0..CRABER_SPAWN_MULTIPLIER {
+            let mut rng = rand::thread_rng();
+            let position = Vec3::new(
+                rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
+                rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
+                0.0,
+            );
+            // let velocity = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR;
+            let velocity: LinearVelocity = LinearVelocity {
+                0: Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR,
+            };
+            let rotation = Quat::from_rotation_z(rng.gen_range(0.0..std::f32::consts::PI * 2.0));
+            spawn_events.send(SpawnEvent {
+                position,
+                // velocity,
+                roation: rotation,
+                craber: Craber {
+                    max_energy: 100.0,
+                    max_health: 100.0,
+                    energy: 100.0,
+                    health: 100.0,
+                },
+            });
+        }
     }
 }
 
 // Make crabers lose energy over time
 pub fn energy_consumption(
-    mut query: Query<(Entity, &mut Craber, &mut Velocity)>,
+    mut query: Query<(Entity, &mut Craber, &mut LinearVelocity)>,
     time: Res<Time>,
     mut reproduce_events: EventWriter<ReproduceEvent>,
 ) {
@@ -191,20 +210,20 @@ pub fn craber_reproduce(
     let mut rng = rand::thread_rng();
     for event in reproduce_events.read() {
         let mut craber = craber_query.get_mut(event.entity).unwrap();
-        let velocity: Velocity = Velocity::linear(Vec2::new(0., 0.) * SPEED_FACTOR);
+        // let velocity: Velocity = Velocity::linear(Vec2::new(0., 0.) * SPEED_FACTOR);
 
         // Position offset from parent to the back, first find the angle of the parent
         let parent_angle = craber.1.rotation.to_axis_angle().1;
         let position_offset = Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 2.0;
         let position = craber.1.translation + position_offset.extend(0.0);
-        println!("Parent position: {:?}", craber.1.translation);
+        // println!("Parent position: {:?}", craber.1.translation);
         craber.0.energy -= CRABER_REPRODUCE_ENERGY;
 
         // Rotation 180 degrees from parent
         let rotation = Quat::from_rotation_z(parent_angle + std::f32::consts::PI);
         spawn_events.send(SpawnEvent {
             position,
-            velocity,
+            // velocity,
             roation: rotation,
             craber: Craber {
                 max_energy: 100.0,
@@ -218,7 +237,7 @@ pub fn craber_reproduce(
 
 // Make crabers switch directions every X seconds and change color to random
 pub fn ravers(
-    mut query: Query<(&mut Craber, &mut Velocity, &mut Sprite)>,
+    mut query: Query<(&mut Craber, &mut LinearVelocity, &mut Sprite)>,
     time: Res<Time>,
     mut timer: ResMut<RaversTimer>,
 ) {

@@ -2,6 +2,14 @@
 <html>
 <head>
     <title>Crabers Game</title>
+    <style>
+        /* Optional: Ensure the canvas fills the window */
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block; /* Removes extra space below the canvas */
+        }
+    </style>
 </head>
 <body>
     <h1>Welcome to Crabers Game</h1>
@@ -16,8 +24,17 @@
                 console.error('Loading Wasm failed:', err);
             }
         }
+        function resizeCanvas() {
+            const canvas = document.getElementsByTagName("canvas")[0];
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            canvas.style.width = window.innerWidth + "px";
+            canvas.style.height = window.innerHeight + "px";
+        }
 
+        window.addEventListener('resize', resizeCanvas);
         loadWasm();
+        
     </script>
 </body>
 </html>

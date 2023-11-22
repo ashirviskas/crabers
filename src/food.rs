@@ -1,5 +1,6 @@
 use bevy::prelude::*;
-use bevy_rapier2d::prelude::*;
+// use bevy_rapier2d::prelude::*;
+use bevy_xpbd_2d::prelude::*;
 
 use rand::Rng;
 
@@ -38,7 +39,8 @@ pub fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<F
             .insert(Food { energy_value })
             .insert(SelectableEntity::Food)
             .insert(EntityType::Food)
-            .insert(Weight { weight: 1.0 })
-            .insert(ActiveEvents::COLLISION_EVENTS);
+            .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+            .insert(Weight { weight: 1.0 });
+        // .insert(ActiveEvents::COLLISION_EVENTS);
     }
 }
