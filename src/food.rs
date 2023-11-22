@@ -39,7 +39,10 @@ pub fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<F
             .insert(Food { energy_value })
             .insert(SelectableEntity::Food)
             .insert(EntityType::Food)
-            .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+            .insert(CollisionLayers::new(
+                [Layer::Food],
+                [Layer::Food, Layer::Craber],
+            ))
             .insert(Weight { weight: 1.0 });
         // .insert(ActiveEvents::COLLISION_EVENTS);
     }

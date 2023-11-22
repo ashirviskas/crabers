@@ -11,6 +11,9 @@ use bevy_xpbd_2d::prelude::*;
 mod craber;
 use craber::*;
 
+mod brain;
+use brain::*;
+
 mod food;
 use food::*;
 
@@ -29,6 +32,8 @@ const GRAVITY: f32 = 0.0;
 const DRAG: f32 = 0.01;
 
 const FORCE_APPLICATION_RATE: f32 = 0.5;
+
+const VISION_UPDATE_RATE: f32 = 0.1;
 
 #[cfg(target_arch = "wasm32")]
 const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = true;
@@ -130,6 +135,11 @@ fn setup(mut commands: Commands) {
         TimerMode::Repeating,
     )));
 
+    commands.insert_resource(VisionUpdateTimer(Timer::from_seconds(
+        VISION_UPDATE_RATE,
+        TimerMode::Repeating,
+    )));
+
     // commands.insert_resource(RapierConfiguration {
     //     gravity: Vect::new(0.0, GRAVITY),
     //     ..Default::default()
@@ -146,7 +156,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
@@ -159,7 +169,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
@@ -172,7 +182,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
     commands
@@ -185,7 +195,7 @@ fn setup(mut commands: Commands) {
             transform: Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
             ..Default::default()
         })
-        .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Blue]))
         .insert(RigidBody::Static)
         .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
@@ -461,3 +471,42 @@ fn apply_acceleration(
         // println!("Force after: {:?}", external_force);
     }
 }
+
+// pub fn vision_update(
+//     mut query: Query<(Entity, &mut Vision,
+//     mut timer: ResMut<VisionUpdateTimer>,
+//     mut spatial_query: SpatialQuery,
+//     time: Res<Time>,
+// ) {
+//     if !timer.0.tick(time.delta()).just_finished() {
+//         return;
+//     }
+//     for (entity, mut vision
+//         let intersections = spatial_query.shape_hits(point, vision)
+//         vision.nearest_food_angle = None;
+//         vision.see_food = false;
+//     }
+// }
+
+// pub fn brain_update(
+//     mut query: Query<(&mut Brain, &mut Craber)>,
+//     time: Res<Time>,
+// ) {
+//     for (mut brain, mut craber) in query.iter_mut() {
+//         // Get brain input types
+//         let input_types = brain.get_input_types();
+//         // Update inputs
+//         for input_type in input_types {
+//             match input_type {
+//                 NeuronType::NearestFoodAngle => {
+//                     brain.update_input(
+//                         input_type,
+//                         Brain::angle_to_normalized_value(
+//                             craber.nearest_food_angle.unwrap_or(0.0),
+//                         ),
+//                     );
+//                 }
+//             }
+//         }
+//     }
+// }

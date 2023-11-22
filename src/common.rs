@@ -5,8 +5,11 @@ use bevy_xpbd_2d::prelude::*;
 // Define the collision layers
 #[derive(PhysicsLayer)]
 pub enum Layer {
+    Craber,
+    Food,
+    Vision,
     Blue,
-    Red,
+    Wall,
 }
 
 // Constants for debug build

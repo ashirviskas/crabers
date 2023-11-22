@@ -1,4 +1,5 @@
-use bevy::prelude::*;
+use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
+use bevy_rapier2d::na::Translation;
 // use bevy_rapier2d::prelude::*;
 use bevy_xpbd_2d::prelude::*;
 
@@ -6,6 +7,8 @@ use rand::prelude::SliceRandom;
 use rand::Rng;
 
 use crate::common::*;
+
+use crate::brain::*;
 
 const ENERGY_CONSUMPTION_RATE: f32 = 0.15;
 const CRABER_MASS: f32 = 0.5;
@@ -92,6 +95,8 @@ pub fn spawn_craber(
     asset_server: Res<AssetServer>,
     mut spawn_events: EventReader<SpawnEvent>,
     crabers_query: Query<&Craber>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     if crabers_query.iter().len() >= MAX_CRABERS {
         return;
@@ -113,7 +118,7 @@ pub fn spawn_craber(
         .unwrap();
         // println!("Position: {:?}", position);
 
-        commands
+        let craber = commands
             .spawn(RigidBody::Dynamic)
             .insert(Collider::ball(CRABER_SIZE / 2.0))
             .insert(ColliderDensity(2.5))
@@ -141,11 +146,52 @@ pub fn spawn_craber(
             // .insert(velocity)
             .insert(Weight { weight: 1.0 })
             .insert(Acceleration(Vec2::new(0.0, -1.0)))
-            .insert(CollisionLayers::new([Layer::Blue], [Layer::Blue]))
+            .insert(CollisionLayers::new(
+                [Layer::Craber],
+                [Layer::Food, Layer::Craber, Layer::Wall],
+            ))
             // .insert(ActiveEvents::COLLISION_EVENTS)
             // .insert(ExternalForce::new(Vec2::Y).with_persistence(true),)
             .insert(Friction::new(0.3))
-            .insert(EntityType::Craber);
+            .insert(Brain::default())
+            .insert(EntityType::Craber)
+            .id();
+        let vision = Vision {
+            radius: 100.0,
+            nearest_food_angle: 0.0,
+            see_food: false,
+        };
+        let rand_pretty_color = Color::rgb(
+            rand::thread_rng().gen_range(0.0..1.0),
+            rand::thread_rng().gen_range(0.0..1.0),
+            rand::thread_rng().gen_range(0.0..1.0),
+        );
+        let craber_vision = commands
+            .spawn(RigidBody::Kinematic)
+            .insert(Collider::ball(vision.radius))
+            .insert(Name::new("CraberVision"))
+            .insert(MaterialMesh2dBundle {
+                mesh: meshes.add(shape::Circle::new(100.).into()).into(),
+                material: materials.add(
+                    Color::rgba(
+                        rand_pretty_color.r(),
+                        rand_pretty_color.g(),
+                        rand_pretty_color.b(),
+                        0.3,
+                    )
+                    .into(),
+                ),
+                transform: Transform {
+                    translation: Vec3::new(0., 0., 0.),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .insert(CollisionLayers::new([Layer::Vision], [Layer::Food]))
+            .insert(vision)
+            .id();
+
+        commands.entity(craber).push_children(&[craber_vision]);
     }
 }
 
