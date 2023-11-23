@@ -54,6 +54,18 @@ pub struct ReproduceEvent {
     pub entity: Entity,
 }
 
+pub enum VisionEventType {
+    Entered,
+    Exited,
+}
+
+#[derive(Event)]
+pub struct VisionEvent {
+    pub vision_entity: Entity,
+    pub entity: Entity,
+    pub event_type: VisionEventType,
+}
+
 // Spawn event
 #[derive(Event)]
 pub struct SpawnEvent {
@@ -159,6 +171,7 @@ pub fn spawn_craber(
             nearest_food_angle_radians: 0.0,
             nearest_food_distance: 0.0,
             see_food: false,
+            entities_in_vision: Vec::new(),
         };
         let rand_pretty_color = Color::rgb(
             rand::thread_rng().gen_range(0.0..1.0),
@@ -166,7 +179,7 @@ pub fn spawn_craber(
             rand::thread_rng().gen_range(0.0..1.0),
         );
         let craber_vision = commands
-            .spawn(RigidBody::Kinematic)
+            .spawn(RigidBody::Dynamic)
             .insert(Collider::ball(vision.radius))
             .insert(Name::new("CraberVision"))
             .insert(MaterialMesh2dBundle {

@@ -294,4 +294,5 @@ pub struct Vision {
     pub nearest_food_angle_radians: f32,
     pub nearest_food_distance: f32,
     pub see_food: bool,
+    pub entities_in_vision: Vec<Entity>,
 }

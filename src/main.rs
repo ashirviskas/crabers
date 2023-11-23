@@ -23,7 +23,7 @@ use common::*;
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.01;
-const CRABER_SPAWN_RATE: f32 = 0.1;
+const CRABER_SPAWN_RATE: f32 = 10.1;
 
 const WALL_THICKNESS: f32 = 60.0;
 // const QUAD_TREE_CAPACITY: usize = 16;
@@ -70,6 +70,7 @@ fn main() {
         .add_event::<DespawnEvent>()
         .add_event::<SpawnEvent>()
         .add_event::<ReproduceEvent>()
+        .add_event::<VisionEvent>()
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, entity_selection)
@@ -84,6 +85,7 @@ fn main() {
         // .add_systems(Update, update_craber_color)
         .add_systems(Update, print_current_entity_count)
         .add_systems(Update, do_collision)
+        // .add_systems(Update, do_decollisions)
         .add_systems(Update, do_despawning)
         .add_systems(Update, spawn_craber)
         .add_systems(Update, apply_acceleration)
@@ -337,37 +339,18 @@ fn update_selected_entity_info(
     }
 }
 
-fn quad_tree_update(
-    _commands: Commands,
-    mut quadtree: ResMut<Quadtree>,
-    mut craber_query: Query<(Entity, &EntityType, &mut Craber, &Transform)>,
-    food_query: Query<(Entity, &EntityType, &Food, &Transform)>,
-) {
-    quadtree.clear();
-    for (entity, _, _, transform) in craber_query.iter_mut() {
-        let quad_tree_entity =
-            QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Craber);
-        quadtree.insert(quad_tree_entity);
-    }
-    for (entity, _, _, transform) in food_query.iter() {
-        let quad_tree_entity =
-            QuadtreeEntity::new(transform.translation.truncate(), entity, EntityType::Food);
-        quadtree.insert(quad_tree_entity);
-    }
-}
-
 fn do_collision(
     _commands: Commands,
-    mut collide_event_reader: EventReader<CollisionStarted>,
+    mut collide_event_reader: EventReader<Collision>,
     query: Query<(Entity, &Transform, &EntityType)>,
     mut craber_query: Query<(Entity, &mut Craber)>,
     food_query: Query<(Entity, &mut Food, &Transform)>,
     mut despawn_events: EventWriter<DespawnEvent>,
-    mut vision_query: Query<(&mut Vision, &Transform)>,
+    mut vision_events: EventWriter<VisionEvent>,
 ) {
     for collide_event in collide_event_reader.read() {
-        let entity1 = collide_event.0;
-        let entity2 = collide_event.1;
+        let entity1 = collide_event.0.entity1;
+        let entity2 = collide_event.0.entity2;
 
         if let Ok((entity1, _, entity1_type)) = query.get(entity1) {
             if let Ok((entity2, _, entity2_type)) = query.get(entity2) {
@@ -393,29 +376,68 @@ fn do_collision(
                             }
                         }
                     }
-                    // (EntityType::Vision, EntityType::Food) => {
-                    //     if let Ok(mut vision) = vision_query.get_mut(entity1) {
-                    //         if let Ok(food) = food_query.get(entity2) {
-                    //             let food_distance = (vision.1.translation - food.2.translation)
-                    //                 .length();
-                    //             if food_distance < vision.0.nearest_food_distance {
-                    //                 vision.0.nearest_food_distance = food_distance;
-                    //                 vision.0.nearest_food_angle = vision.1.translation
-                    //                     .angle_between(food.2.translation);
-                    //                 vision.0.see_food = true;
-                    //                 println!("Food seen!");
-                    //                 println!("Angle: {}", vision.0.nearest_food_angle);
-                    //                 println!("Distance: {}", vision.0.nearest_food_distance);
-                    //             }
-                    //         }
-                    //     }
-                    // }
+                    (EntityType::Food, EntityType::Vision) => { // Do entered vision instead and start tracking
+                        vision_events.send(VisionEvent {
+                            vision_entity: entity2,
+                            entity: entity1,
+                            event_type: VisionEventType::Entered,
+                        });
+                        println!("Food with entity {:?} entered vision", entity1);
+                        // println!("Food entered vision A");
+                    }
+                    (EntityType::Vision, EntityType::Food) => {
+                        vision_events.send(VisionEvent {
+                            vision_entity: entity1,
+                            entity: entity2,
+                            event_type: VisionEventType::Entered,
+                        });
+                        println!("Food with entity {:?} entered vision", entity2);
+                        // println!("Food entered vision B");
+                    }
                     _ => {}
                 }
             }
         }
     }
 }
+
+// fn do_decollisions(
+//     _commands: Commands,
+//     mut decollide_event_reader: EventReader<CollisionEnded>,
+//     query: Query<(Entity, &Transform, &EntityType)>,
+//     mut vision_events: EventWriter<VisionEvent>,
+// ) {
+//     for decollide_event in decollide_event_reader.read() {
+//         let entity1 = decollide_event.0;
+//         let entity2 = decollide_event.1;
+
+//         if let Ok((entity1, _, entity1_type)) = query.get(entity1) {
+//             if let Ok((entity2, _, entity2_type)) = query.get(entity2) {
+//                 match (entity1_type, entity2_type) {
+//                     (EntityType::Food, EntityType::Vision) => {
+//                         vision_events.send(VisionEvent {
+//                             vision_entity: entity2,
+//                             entity: entity1,
+//                             event_type: VisionEventType::Exited,
+//                         });
+//                         println!("Food with entity {:?} exited vision", entity1);
+//                         // println!("Food exited vision A");
+//                     }
+//                     (EntityType::Vision, EntityType::Food) => {
+//                         vision_events.send(VisionEvent {
+//                             vision_entity: entity1,
+//                             entity: entity2,
+//                             event_type: VisionEventType::Exited,
+//                         });
+//                         println!("Food with entity {:?} exited vision", entity2);
+//                         // println!("Food exited vision B");
+//                     }
+//                     _ => {}
+//                 }
+//             }
+//         }
+//     }
+// }
 
 fn do_despawning(
     mut commands: Commands,
@@ -462,7 +484,13 @@ fn apply_acceleration(
         let force_2d = Vec2::new(force.x, force.y);
         linear_velocity.0 = force_2d;
         let rotation_vector = brain.get_rotation();
+        if rotation_vector != 0.0 {
+            println!("Rotation vector: {}", rotation_vector);
+        }
         angular_velocity.0 = rotation_vector;
+        // Debug, apply rotation as force
+        // external_force.apply_force(Vec2::new(rotation_vector * 100., 0.));
+        // linear_velocity.0 += rotation_vector * 100.;
         // println!("Rotation vector: {}", rotation_vector);
     }
 }
@@ -470,38 +498,69 @@ fn apply_acceleration(
 pub fn vision_update(
     spatial_query: SpatialQuery,
     mut query: Query<(&mut Vision, &Transform, &Collider, &Parent)>,
-    entity_transform_query: Query<&Transform>,
+    mut food_query: Query<(&mut Food, &Transform)>,
+    craber_query: Query<(&Craber, &Transform)>,
+    mut vision_events: EventReader<VisionEvent>,
 ) {
+    // add or remove food from vSision
+    for vision_event in vision_events.read() {
+        match vision_event.event_type {
+            VisionEventType::Entered => {
+                    if let Ok((mut vision, _, _, _)) =
+                        query.get_mut(vision_event.vision_entity)
+                    {
+                        vision.see_food = true;
+                        vision.entities_in_vision.push(vision_event.entity);
+                    }
+            }
+            // VisionEventType::Exited => {
+            //     if let Ok((mut vision, _, _, _)) = query.get_mut(vision_event.vision_entity) {
+            //         vision.entities_in_vision.retain(|&x| x != vision_event.entity);
+            //         if vision.entities_in_vision.is_empty() {
+            //             vision.see_food = false;
+            //         }
+            //     }
+            // }
+            _ => {}
+        }
+    }
+    // update food in vision
+    let spatial_query_filter = SpatialQueryFilter {
+        masks: Layer::Food.to_bits(),
+        ..Default::default()
+    };
     for (mut vision, _, collider, parent) in query.iter_mut() {
-        let craber_transform = entity_transform_query.get(parent.get()).unwrap();
+        if vision.entities_in_vision.is_empty() {
+            continue;
+        }
+        let craber_transform = craber_query.get(parent.get()).unwrap().1;
         let intersections_entities = spatial_query.shape_intersections(
             &collider,
             craber_transform.translation.truncate(),
             0.,
-            SpatialQueryFilter {
-                masks: Layer::Food.to_bits(),
-                ..Default::default()
-            },
+            spatial_query_filter.clone(),
         );
         vision.see_food = false;
         if intersections_entities.is_empty() {
+            // No intersections, no entities in vision
+            vision.entities_in_vision.clear();
             continue;
         }
         let mut nearest_food_distance = 1000.0;
         let mut nearest_food_angle = 0.0;
         for intersection in intersections_entities.iter() {
-            let food_transform = match entity_transform_query.get(*intersection) {
+            let food_transform = match food_query.get_mut(*intersection) {
                 Ok(transform) => transform,
                 Err(_) => {
                     continue;
                 }
             };
             let food_distance =
-                (food_transform.translation - craber_transform.translation).length();
+                (food_transform.1.translation - craber_transform.translation).length();
             if food_distance < nearest_food_distance {
                 nearest_food_distance = food_distance;
                 // nearest_food_angle = food_transform.translation.angle_between(craber_transform.translation);
-                let food_direction = food_transform.translation - craber_transform.translation;
+                let food_direction = food_transform.1.translation - craber_transform.translation;
                 let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
                 // nearest_food_angle = craber_direction.angle_between(food_direction);
                 nearest_food_angle = full_angle_between_vectors(craber_direction, food_direction);
@@ -517,6 +576,52 @@ pub fn vision_update(
         vision.nearest_food_angle_radians = nearest_food_angle;
         vision.see_food = true;
     }
+    // let spatial_query_filter = SpatialQueryFilter {
+    //     masks: Layer::Food.to_bits(),
+    //     ..Default::default()
+    // };
+    // for (mut vision, _, collider, parent) in query.iter_mut() {
+    //     let craber_transform = entity_transform_query.get(parent.get()).unwrap();
+    //     let intersections_entities = spatial_query.shape_intersections(
+    //         &collider,
+    //         craber_transform.translation.truncate(),
+    //         0.,
+    //         spatial_query_filter.clone(),
+    //     );
+    //     vision.see_food = false;
+    //     if intersections_entities.is_empty() {
+    //         continue;
+    //     }
+    //     let mut nearest_food_distance = 1000.0;
+    //     let mut nearest_food_angle = 0.0;
+    //     for intersection in intersections_entities.iter() {
+    //         let food_transform = match entity_transform_query.get(*intersection) {
+    //             Ok(transform) => transform,
+    //             Err(_) => {
+    //                 continue;
+    //             }
+    //         };
+    //         let food_distance =
+    //             (food_transform.translation - craber_transform.translation).length();
+    //         if food_distance < nearest_food_distance {
+    //             nearest_food_distance = food_distance;
+    //             // nearest_food_angle = food_transform.translation.angle_between(craber_transform.translation);
+    //             let food_direction = food_transform.translation - craber_transform.translation;
+    //             let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
+    //             // nearest_food_angle = craber_direction.angle_between(food_direction);
+    //             nearest_food_angle = full_angle_between_vectors(craber_direction, food_direction);
+    //         }
+    //     }
+    //     if nearest_food_distance == 1000.0 {
+    //         vision.see_food = false;
+    //         continue;
+    //     }
+    //     // println!("Nearest food distance: {}", nearest_food_distance);
+    //     // println!("Nearest food angle: {}", nearest_food_angle);
+    //     vision.nearest_food_distance = nearest_food_distance;
+    //     vision.nearest_food_angle_radians = nearest_food_angle;
+    //     vision.see_food = true;
+    // }
 }
 
 pub fn brain_update(
@@ -525,8 +630,6 @@ pub fn brain_update(
     time: Res<Time>,
 ) {
     for (mut brain, mut craber, children) in query.iter_mut() {
-        // Get brain input types
-        let input_types = brain.get_input_types();
         // Update inputs
         if vision_query.get(children[0]).unwrap().0.see_food {
             brain.update_input(
