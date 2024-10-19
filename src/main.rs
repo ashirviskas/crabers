@@ -3,10 +3,8 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
-// use bevy_inspector_egui::quick::WorldInspectorPlugin;
-// use bevy_inspector_egui_rapier::InspectableRapierPlugin;
-// use bevy_rapier2d::prelude::*;
-use bevy_xpbd_2d::prelude::*;
+use avian2d::{parry::shape::Cuboid, prelude::*, math::*};
+// use avian2d::collision::collider::parry::*;
 
 mod craber;
 use craber::*;
@@ -19,11 +17,18 @@ use food::*;
 
 mod common;
 use bevy_pancam::{PanCam, PanCamPlugin};
-use common::*;
+use common::{
+    Rectangle,
+    *
+};
+
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.01;
-const CRABER_SPAWN_RATE: f32 = 10.1;
+const CRABER_SPAWN_RATE: f32 = 0.1;
+
+const MAX_CRABER_COUNT: usize = 10000;
+const MAX_FOOD_COUNT: usize = 10000;
 
 const WALL_THICKNESS: f32 = 60.0;
 // const QUAD_TREE_CAPACITY: usize = 16;
@@ -114,7 +119,7 @@ fn setup(mut commands: Commands) {
         enabled: true,              // when false, controls are disabled. See toggle example.
         zoom_to_cursor: true,       // whether to zoom towards the mouse or the center of the screen
         min_scale: 0.1,             // prevent the camera from zooming too far in
-        max_scale: Some(40.),       // prevent the camera from zooming too far out
+        max_scale: 40.,       // prevent the camera from zooming too far out
         ..Default::default()
     });
     commands.insert_resource(FoodSpawnTimer(Timer::from_seconds(
@@ -157,7 +162,9 @@ fn setup(mut commands: Commands) {
         })
         .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
-        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
+        .insert(Collider::rectangle(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
+    // .insert(Collider::from(Cuboid::new(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0)));
+
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -170,7 +177,7 @@ fn setup(mut commands: Commands) {
         })
         .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
-        .insert(Collider::cuboid(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
+        .insert(Collider::rectangle(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -183,7 +190,7 @@ fn setup(mut commands: Commands) {
         })
         .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
-        .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
+        .insert(Collider::rectangle(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
     commands
         .spawn(SpriteBundle {
             sprite: Sprite {
@@ -196,7 +203,7 @@ fn setup(mut commands: Commands) {
         })
         .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
         .insert(RigidBody::Static)
-        .insert(Collider::cuboid(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
+        .insert(Collider::rectangle(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
 
 fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
@@ -247,7 +254,7 @@ fn update_debug_info(
 ) {
     debug_info.entity_count = craber_query.iter().count() + food_query.iter().count();
     let fps = diagnostics
-        .get(FrameTimeDiagnosticsPlugin::FPS)
+        .get(&FrameTimeDiagnosticsPlugin::FPS)
         .and_then(|x| x.average());
 
     if let Some(fps) = fps {
@@ -259,14 +266,18 @@ fn update_debug_info(
 
     for mut text in query.iter_mut() {
         text.sections[1].value = format!(
-            "\nEntity count: {}, \nFPS: {:.2}",
-            debug_info.entity_count, debug_info.fps
+            // "\nEntity count: {}, \nFPS: {:.2}",
+            "\n Craber count: {}, \n Food count: {}, Total: {}, \n FPS: {:.2}",
+            craber_query.iter().count(),
+            food_query.iter().count(),
+            debug_info.entity_count,
+            debug_info.fps
         );
     }
 }
 
 fn entity_selection(
-    mouse_button_input: Res<Input<MouseButton>>,
+    mouse_button_input: Res<ButtonInput<MouseButton>>,
     windows: Query<&Window>,
     query: Query<(Entity, &Transform, &SelectableEntity), With<SelectableEntity>>,
     mut selected: ResMut<SelectedEntity>,
@@ -526,7 +537,7 @@ pub fn vision_update(
     }
     // update food in vision
     let spatial_query_filter = SpatialQueryFilter {
-        masks: Layer::Food.to_bits(),
+        mask: LayerMask(Layer::Food.to_bits()),
         ..Default::default()
     };
     for (mut vision, _, collider, parent) in query.iter_mut() {

@@ -1,5 +1,5 @@
 use bevy::{prelude::*, sprite::MaterialMesh2dBundle};
-use bevy_xpbd_2d::prelude::*;
+use avian2d::prelude::*;
 
 use rand::prelude::SliceRandom;
 use rand::Rng;
@@ -130,7 +130,7 @@ pub fn spawn_craber(
 
         let craber = commands
             .spawn(RigidBody::Dynamic)
-            .insert(Collider::ball(CRABER_SIZE / 2.0))
+            .insert(Collider::from(Circle::new(CRABER_SIZE / 2.0)))
             .insert(ColliderDensity(2.5))
             .insert(Mass(CRABER_MASS))
             .insert(Inertia(CRABER_INERTIA))
@@ -178,33 +178,33 @@ pub fn spawn_craber(
             rand::thread_rng().gen_range(0.0..1.0),
             rand::thread_rng().gen_range(0.0..1.0),
         );
-        let craber_vision = commands
-            .spawn(RigidBody::Dynamic)
-            .insert(Collider::ball(vision.radius))
-            .insert(Name::new("CraberVision"))
-            .insert(MaterialMesh2dBundle {
-                mesh: meshes.add(shape::Circle::new(100.).into()).into(),
-                material: materials.add(
-                    Color::rgba(
-                        rand_pretty_color.r(),
-                        rand_pretty_color.g(),
-                        rand_pretty_color.b(),
-                        0.3,
-                    )
-                    .into(),
-                ),
-                transform: Transform {
-                    translation: Vec3::new(0., 0., 0.),
-                    ..Default::default()
-                },
-                ..Default::default()
-            })
-            .insert(CollisionLayers::new([Layer::Vision], [Layer::Food]))
-            .insert(vision)
-            .insert(EntityType::Vision)
-            .id();
+        // let craber_vision = commands
+        //     .spawn(RigidBody::Dynamic)
+        //     .insert(Collider::ball(vision.radius))
+        //     .insert(Name::new("CraberVision"))
+        //     .insert(MaterialMesh2dBundle {
+        //         mesh: meshes.add(shape::Circle::new(100.).into()).into(),
+        //         material: materials.add(
+        //             Color::rgba(
+        //                 rand_pretty_color.r(),
+        //                 rand_pretty_color.g(),
+        //                 rand_pretty_color.b(),
+        //                 0.3,
+        //             )
+        //             .into(),
+        //         ),
+        //         transform: Transform {
+        //             translation: Vec3::new(0., 0., 0.),
+        //             ..Default::default()
+        //         },
+        //         ..Default::default()
+        //     })
+        //     .insert(CollisionLayers::new([Layer::Vision], [Layer::Food]))
+        //     .insert(vision)
+        //     .insert(EntityType::Vision)
+        //     .id();
 
-        commands.entity(craber).push_children(&[craber_vision]);
+        // commands.entity(craber).push_children(&[craber_vision]);
     }
 }
 

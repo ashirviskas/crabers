@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use bevy_xpbd_2d::prelude::*;
+use avian2d::prelude::*;
 
 // Define the collision layers
 #[derive(PhysicsLayer)]

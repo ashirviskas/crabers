@@ -1,6 +1,7 @@
 use bevy::prelude::*;
+use bevy::color::palettes::css::BLUE;
 // use bevy_rapier2d::prelude::*;
-use bevy_xpbd_2d::prelude::*;
+use avian2d::prelude::*;
 
 use rand::Rng;
 
@@ -28,14 +29,14 @@ pub fn food_spawner(mut commands: Commands, time: Res<Time>, mut timer: ResMut<F
         commands
             .spawn(SpriteBundle {
                 sprite: Sprite {
-                    color: Color::BLUE,
+                    color: Color::from(BLUE),
                     custom_size: Some(Vec2::new(FOOD_SIZE, FOOD_SIZE)),
                     ..Default::default()
                 },
                 transform: Transform::from_translation(position.extend(0.0)),
                 ..Default::default()
             })
-            .insert(Collider::ball(FOOD_SIZE / 2.0))
+            .insert(Collider::from(Circle::new(FOOD_SIZE / 2.0)))
             .insert(Food { energy_value })
             .insert(SelectableEntity::Food)
             .insert(EntityType::Food)

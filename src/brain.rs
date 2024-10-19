@@ -20,6 +20,7 @@ pub enum NeuronType {
     MoveForward,
     Rotate,
     ModifyBrainInterval,
+    MoodOutput,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
