@@ -16,8 +16,8 @@ pub const SPEED_FACTOR: f32 = 100.0;
 pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
 pub const CRABER_REPRODUCE_ENERGY: f32 = 20.0;
-pub const MAX_CRABERS: usize = 20000;
-pub const CRABER_SPAWN_MULTIPLIER: usize = 5;
+pub const MAX_CRABERS: usize = 5000;
+pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
 pub enum CraberTexture {
     A,
     B,
@@ -38,7 +38,7 @@ impl CraberTexture {
     }
 }
 
-#[derive(Component, Copy, Clone)]
+#[derive(Component, Copy, Clone, Debug)]
 pub struct Craber {
     pub max_energy: f32,
     pub max_health: f32,
@@ -64,6 +64,8 @@ pub struct VisionEvent {
     pub vision_entity: Entity,
     pub entity: Entity,
     pub event_type: VisionEventType,
+    pub entity_id: u8,
+    pub manifolds: Vec<ContactManifold>
 }
 
 // Spawn event
@@ -128,7 +130,7 @@ pub fn spawn_craber(
         .unwrap();
         // println!("Position: {:?}", position);
 
-        let craber = commands
+        let new_craber = commands
             .spawn(RigidBody::Dynamic)
             .insert(Collider::from(Circle::new(CRABER_SIZE / 2.0)))
             .insert(ColliderDensity(2.5))
@@ -173,38 +175,39 @@ pub fn spawn_craber(
             see_food: false,
             entities_in_vision: Vec::new(),
         };
-        let rand_pretty_color = Color::rgb(
+        let rand_pretty_color = Color::srgba(
             rand::thread_rng().gen_range(0.0..1.0),
             rand::thread_rng().gen_range(0.0..1.0),
             rand::thread_rng().gen_range(0.0..1.0),
+            0.2
         );
-        // let craber_vision = commands
-        //     .spawn(RigidBody::Dynamic)
-        //     .insert(Collider::ball(vision.radius))
-        //     .insert(Name::new("CraberVision"))
-        //     .insert(MaterialMesh2dBundle {
-        //         mesh: meshes.add(shape::Circle::new(100.).into()).into(),
-        //         material: materials.add(
-        //             Color::rgba(
-        //                 rand_pretty_color.r(),
-        //                 rand_pretty_color.g(),
-        //                 rand_pretty_color.b(),
-        //                 0.3,
-        //             )
-        //             .into(),
-        //         ),
-        //         transform: Transform {
-        //             translation: Vec3::new(0., 0., 0.),
-        //             ..Default::default()
-        //         },
-        //         ..Default::default()
-        //     })
-        //     .insert(CollisionLayers::new([Layer::Vision], [Layer::Food]))
-        //     .insert(vision)
-        //     .insert(EntityType::Vision)
-        //     .id();
+        let craber_vision = commands
+            .spawn((RigidBody::Dynamic, Collider::circle(vision.radius), Sensor, Inertia(0.001), Mass(0.001)))
+            // .insert(Collider::circle(vision.radius))
+            .insert(Name::new("CraberVision"))
+            .insert(MaterialMesh2dBundle {
+                mesh: meshes.add(Circle::new(vision.radius)).into(),
+                material: materials.add(
+                    rand_pretty_color
+                ),
+                transform: Transform {
+                    translation: Vec3::new(0., 0., 0.),
+                    ..Default::default()
+                },
+                ..Default::default()
+            })
+            .insert(CollisionLayers::new([Layer::Vision], [Layer::Food]))
+            // .insert(CollisionLayers::new([Layer::Food], [Layer::Vision]))
+            .insert(vision)
+            .insert(Weight { weight: 1.0 })
+            // .insert()
 
-        // commands.entity(craber).push_children(&[craber_vision]);
+            .insert(EntityType::Vision)
+            .id();
+
+        // commands.entity(new_craber).push_children(&[craber_vision]);
+        commands.entity(new_craber).add_child(craber_vision);
+        commands.spawn(FixedJoint::new(new_craber, craber_vision));
     }
 }
 
@@ -221,14 +224,9 @@ pub fn craber_spawner(
                 rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
                 0.0,
             );
-            // let velocity = Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR;
-            let velocity: LinearVelocity = LinearVelocity {
-                0: Vec2::new(rng.gen_range(-1.0..1.0), rng.gen_range(-1.0..1.0)) * SPEED_FACTOR,
-            };
             let rotation = Quat::from_rotation_z(rng.gen_range(0.0..std::f32::consts::PI * 2.0));
             spawn_events.send(SpawnEvent {
                 position,
-                // velocity,
                 roation: rotation,
                 craber: Craber {
                     max_energy: 100.0,

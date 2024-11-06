@@ -235,8 +235,8 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
     for mut text in query.iter_mut() {
         if let Some(_) = selected.entity {
             text.sections[0].value = format!(
-                "Health: {:.2}, Energy: {:.2}",
-                selected.health, selected.energy
+                "Health: {:.2}, Energy: {:.2}, Generation: {}",
+                selected.health, selected.energy, selected.generation
             );
         } else {
             text.sections[0].value = "No craber selected".to_string();
@@ -341,6 +341,7 @@ fn update_selected_entity_info(
         if let Ok(craber) = craber_query.get(entity) {
             selected.health = craber.health;
             selected.energy = craber.energy;
+            // selected.generation = craber
         }
         // Check if the selected entity is Food
         else if let Ok(food) = food_query.get(entity) {
@@ -359,10 +360,10 @@ fn do_collision(
     mut despawn_events: EventWriter<DespawnEvent>,
     mut vision_events: EventWriter<VisionEvent>,
 ) {
-    for collide_event in collide_event_reader.read() {
-        let entity1 = collide_event.0.entity1;
-        let entity2 = collide_event.0.entity2;
-
+    for Collision(contact) in collide_event_reader.read() {
+        let entity1 = contact.entity1;
+        let entity2 = contact.entity2;
+        let manifolds = &contact.manifolds;
         if let Ok((entity1, _, entity1_type)) = query.get(entity1) {
             if let Ok((entity2, _, entity2_type)) = query.get(entity2) {
                 match (entity1_type, entity2_type) {
@@ -392,8 +393,10 @@ fn do_collision(
                             vision_entity: entity2,
                             entity: entity1,
                             event_type: VisionEventType::Entered,
+                            entity_id: 2,
+                            manifolds: manifolds.clone(),
                         });
-                        println!("Food with entity {:?} entered vision", entity1);
+                        println!("A Food with entity {:?} entered vision", entity1);
                         // println!("Food entered vision A");
                     }
                     (EntityType::Vision, EntityType::Food) => {
@@ -401,54 +404,20 @@ fn do_collision(
                             vision_entity: entity1,
                             entity: entity2,
                             event_type: VisionEventType::Entered,
+                            entity_id: 1,
+                            manifolds: manifolds.clone(),
                         });
-                        println!("Food with entity {:?} entered vision", entity2);
+                        println!("B Food with entity {:?} entered vision", entity2);
                         // println!("Food entered vision B");
                     }
-                    _ => {}
+                    _ => {
+                        println!("Entities did not match the test: {} VS {}", entity1, entity2)
+                    }
                 }
             }
         }
     }
 }
-
-// fn do_decollisions(
-//     _commands: Commands,
-//     mut decollide_event_reader: EventReader<CollisionEnded>,
-//     query: Query<(Entity, &Transform, &EntityType)>,
-//     mut vision_events: EventWriter<VisionEvent>,
-// ) {
-//     for decollide_event in decollide_event_reader.read() {
-//         let entity1 = decollide_event.0;
-//         let entity2 = decollide_event.1;
-
-//         if let Ok((entity1, _, entity1_type)) = query.get(entity1) {
-//             if let Ok((entity2, _, entity2_type)) = query.get(entity2) {
-//                 match (entity1_type, entity2_type) {
-//                     (EntityType::Food, EntityType::Vision) => {
-//                         vision_events.send(VisionEvent {
-//                             vision_entity: entity2,
-//                             entity: entity1,
-//                             event_type: VisionEventType::Exited,
-//                         });
-//                         println!("Food with entity {:?} exited vision", entity1);
-//                         // println!("Food exited vision A");
-//                     }
-//                     (EntityType::Vision, EntityType::Food) => {
-//                         vision_events.send(VisionEvent {
-//                             vision_entity: entity1,
-//                             entity: entity2,
-//                             event_type: VisionEventType::Exited,
-//                         });
-//                         println!("Food with entity {:?} exited vision", entity2);
-//                         // println!("Food exited vision B");
-//                     }
-//                     _ => {}
-//                 }
-//             }
-//         }
-//     }
-// }
 
 fn do_despawning(
     mut commands: Commands,
@@ -471,7 +440,7 @@ fn apply_acceleration(
         &Acceleration,
         &Transform,
         &mut ExternalForce,
-        &Brain,
+        &mut Brain,
     )>,
     time: Res<Time>,
     mut timer: ResMut<ForceApplicationTimer>,
@@ -486,9 +455,10 @@ fn apply_acceleration(
         acceleration,
         transform,
         mut external_force,
-        brain,
+        mut brain,
     ) in query.iter_mut()
-    {
+    {   
+
         let force = transform
             .rotation
             .mul_vec3(acceleration.0.extend(0.0) * 100.);
@@ -497,8 +467,12 @@ fn apply_acceleration(
         let rotation_vector = brain.get_rotation();
         if rotation_vector != 0.0 {
             println!("Rotation vector: {}", rotation_vector);
+            angular_velocity.0 = rotation_vector;
+            // stupid workaround for vision decay, should be moved into the brain or a separate vision system
+            brain.update_input(NeuronType::NearestFoodAngle, 0.0);
+            brain.feed_forward();
+
         }
-        angular_velocity.0 = rotation_vector;
         // Debug, apply rotation as force
         // external_force.apply_force(Vec2::new(rotation_vector * 100., 0.));
         // linear_velocity.0 += rotation_vector * 100.;
@@ -507,152 +481,89 @@ fn apply_acceleration(
 }
 
 pub fn vision_update(
-    spatial_query: SpatialQuery,
     mut query: Query<(&mut Vision, &Transform, &Collider, &Parent)>,
     mut food_query: Query<(&mut Food, &Transform)>,
     craber_query: Query<(&Craber, &Transform)>,
     mut vision_events: EventReader<VisionEvent>,
 ) {
-    // add or remove food from vSision
+    // add or remove food from vision
     for vision_event in vision_events.read() {
         match vision_event.event_type {
             VisionEventType::Entered => {
-                    if let Ok((mut vision, _, _, _)) =
+                    println!("Enterantation happened!");
+                    if let Ok((mut vision, transform, collider, parent)) =
                         query.get_mut(vision_event.vision_entity)
                     {
-                        vision.see_food = true;
+                        println!("See food true");
+                        let manifolds = &vision_event.manifolds;
+                        let mut closest_manifold: Option<&ContactManifold> = None;
+                        let mut min_distance = f32::MAX;
+                        let mut closest_point = Vec2::new(0.0, 0.0);
+
+                        for manifold in manifolds {
+                            for contact in &manifold.contacts {
+                                if vision_event.entity_id == 1 {
+                                    // Compute the distance to the circle's center
+                                    let distance = contact.point1.length();
+
+                                    // Update the closest manifold if this distance is smaller
+                                    if distance < min_distance {
+                                        min_distance = distance;
+                                        closest_point = contact.point1;
+                                    }
+                                }
+                                else {
+                                    let distance = contact.point2.length();
+
+                                    // Update the closest manifold if this distance is smaller
+                                    if distance < min_distance {
+                                        min_distance = distance;
+                                        closest_point = contact.point2;
+                                    }
+                                }
+                            }
+                            println!("Doing some Manifolds {} {}", min_distance, closest_point)
+                        }
+                        // Normalizing
+                        closest_point = closest_point / min_distance;
                         vision.entities_in_vision.push(vision_event.entity);
+                        let craber_transform = craber_query.get(parent.get()).unwrap().1;
+                        let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
+                        vision.nearest_food_distance = min_distance;
+                        vision.nearest_food_angle_radians = full_angle_between_vectors(craber_direction, Vec3::new(closest_point.x, closest_point.y, 0.));
+                        vision.see_food = true;
+                        println!("STUFF craber transform: {:?}, D {} Closest P {}  Radians {}", craber_transform, craber_direction, closest_point, vision.nearest_food_angle_radians)
+
                     }
             }
-            // VisionEventType::Exited => {
-            //     if let Ok((mut vision, _, _, _)) = query.get_mut(vision_event.vision_entity) {
-            //         vision.entities_in_vision.retain(|&x| x != vision_event.entity);
-            //         if vision.entities_in_vision.is_empty() {
-            //             vision.see_food = false;
-            //         }
-            //     }
-            // }
             _ => {}
         }
     }
-    // update food in vision
-    let spatial_query_filter = SpatialQueryFilter {
-        mask: LayerMask(Layer::Food.to_bits()),
-        ..Default::default()
-    };
-    for (mut vision, _, collider, parent) in query.iter_mut() {
-        if vision.entities_in_vision.is_empty() {
-            continue;
-        }
-        let craber_transform = craber_query.get(parent.get()).unwrap().1;
-        let intersections_entities = spatial_query.shape_intersections(
-            &collider,
-            craber_transform.translation.truncate(),
-            0.,
-            spatial_query_filter.clone(),
-        );
-        vision.see_food = false;
-        if intersections_entities.is_empty() {
-            // No intersections, no entities in vision
-            vision.entities_in_vision.clear();
-            continue;
-        }
-        let mut nearest_food_distance = 1000.0;
-        let mut nearest_food_angle = 0.0;
-        for intersection in intersections_entities.iter() {
-            let food_transform = match food_query.get_mut(*intersection) {
-                Ok(transform) => transform,
-                Err(_) => {
-                    continue;
-                }
-            };
-            let food_distance =
-                (food_transform.1.translation - craber_transform.translation).length();
-            if food_distance < nearest_food_distance {
-                nearest_food_distance = food_distance;
-                // nearest_food_angle = food_transform.translation.angle_between(craber_transform.translation);
-                let food_direction = food_transform.1.translation - craber_transform.translation;
-                let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
-                // nearest_food_angle = craber_direction.angle_between(food_direction);
-                nearest_food_angle = full_angle_between_vectors(craber_direction, food_direction);
-            }
-        }
-        if nearest_food_distance == 1000.0 {
-            vision.see_food = false;
-            continue;
-        }
-        // println!("Nearest food distance: {}", nearest_food_distance);
-        // println!("Nearest food angle: {}", nearest_food_angle);
-        vision.nearest_food_distance = nearest_food_distance;
-        vision.nearest_food_angle_radians = nearest_food_angle;
-        vision.see_food = true;
-    }
-    // let spatial_query_filter = SpatialQueryFilter {
-    //     masks: Layer::Food.to_bits(),
-    //     ..Default::default()
-    // };
-    // for (mut vision, _, collider, parent) in query.iter_mut() {
-    //     let craber_transform = entity_transform_query.get(parent.get()).unwrap();
-    //     let intersections_entities = spatial_query.shape_intersections(
-    //         &collider,
-    //         craber_transform.translation.truncate(),
-    //         0.,
-    //         spatial_query_filter.clone(),
-    //     );
-    //     vision.see_food = false;
-    //     if intersections_entities.is_empty() {
-    //         continue;
-    //     }
-    //     let mut nearest_food_distance = 1000.0;
-    //     let mut nearest_food_angle = 0.0;
-    //     for intersection in intersections_entities.iter() {
-    //         let food_transform = match entity_transform_query.get(*intersection) {
-    //             Ok(transform) => transform,
-    //             Err(_) => {
-    //                 continue;
-    //             }
-    //         };
-    //         let food_distance =
-    //             (food_transform.translation - craber_transform.translation).length();
-    //         if food_distance < nearest_food_distance {
-    //             nearest_food_distance = food_distance;
-    //             // nearest_food_angle = food_transform.translation.angle_between(craber_transform.translation);
-    //             let food_direction = food_transform.translation - craber_transform.translation;
-    //             let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
-    //             // nearest_food_angle = craber_direction.angle_between(food_direction);
-    //             nearest_food_angle = full_angle_between_vectors(craber_direction, food_direction);
-    //         }
-    //     }
-    //     if nearest_food_distance == 1000.0 {
-    //         vision.see_food = false;
-    //         continue;
-    //     }
-    //     // println!("Nearest food distance: {}", nearest_food_distance);
-    //     // println!("Nearest food angle: {}", nearest_food_angle);
-    //     vision.nearest_food_distance = nearest_food_distance;
-    //     vision.nearest_food_angle_radians = nearest_food_angle;
-    //     vision.see_food = true;
-    // }
 }
 
 pub fn brain_update(
     mut query: Query<(&mut Brain, &mut Craber, &Children)>,
-    vision_query: Query<(&Vision, &Transform)>,
+    mut vision_query: Query<(&mut Vision, &Transform)>,
     time: Res<Time>,
 ) {
     for (mut brain, mut craber, children) in query.iter_mut() {
         // Update inputs
-        if vision_query.get(children[0]).unwrap().0.see_food {
-            brain.update_input(
-                NeuronType::NearestFoodAngle,
-                vision_query
-                    .get(children[0])
-                    .unwrap()
-                    .0
-                    .nearest_food_angle_radians,
-            );
-        } else {
-            brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
+        // if vision_query.get(children[0]).unwrap().0.see_food {
+            let mut vision = vision_query.get_mut(children[0]).unwrap().0;
+            if vision.see_food {
+                println!("See food! {:?} C: {:?}", brain, craber);
+
+                // println!("Brain before: {}", )
+                brain.update_input(
+                    NeuronType::NearestFoodAngle,
+                    // vision_query.get(children[0]).unwrap().0.nearest_food_angle_radians,
+                    vision.nearest_food_angle_radians
+                );
+                vision.no_see_food();
+            } else {
+                // decay vision
+
+                // brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
         }
         brain.feed_forward();
         // brain.print_brain();

@@ -56,6 +56,7 @@ pub struct Neuron {
     pub value: f32,
 }
 
+#[derive(Debug)]
 pub struct Connection {
     pub from_id: usize, // Neuron id. < 100 is input < 200 is hidden < 300 is output.
     pub to_id: usize,   // Neuron id. < 100 is input < 200 is hidden < 300 is output.
@@ -64,7 +65,7 @@ pub struct Connection {
     pub enabled: bool,
 }
 
-#[derive(Component)]
+#[derive(Component, Debug)]
 pub struct Brain {
     pub inputs: Vec<Neuron>,
     pub outputs: Vec<Neuron>,
@@ -125,7 +126,7 @@ impl Brain {
             Connection {
                 from_id: 100,
                 to_id: 201,
-                weight: 4.0, // To make it rotate harder
+                weight: 1.5, // To make it rotate harder
                 bias: 0.0,
                 enabled: true,
             },
@@ -159,15 +160,21 @@ impl Brain {
         }
     }
 
-    // Makes radians negative if the angle is above PI.
+    // make it go between [-1; +1], negative = left, positive = right
     pub fn angle_to_normalized_value(angle_radians: f32) -> f32 {
-        angle_radians - std::f32::consts::PI
+        let mut normalized_angle = angle_radians / std::f32::consts::PI;
+        if normalized_angle > 1.0 {
+            normalized_angle = -(2.0 - angle_radians)
+        }
+        return normalized_angle
     }
 
     pub fn update_input(&mut self, input_neuron_type: NeuronType, value: f32) {
+        print!("Updating craber neuron input");
         for neuron in self.inputs.iter_mut() {
             if neuron.neuron_type == input_neuron_type {
                 neuron.value = value;
+                println!("Updated neuron type {:?} to value {}", input_neuron_type, value)
             }
         }
     }
@@ -296,4 +303,13 @@ pub struct Vision {
     pub nearest_food_distance: f32,
     pub see_food: bool,
     pub entities_in_vision: Vec<Entity>,
+}
+
+impl Vision {
+    pub fn no_see_food(&mut self) {
+        self.see_food = false;
+        self.nearest_food_distance = std::f32::MAX;
+        self.nearest_food_angle_radians = std::f32::consts::PI;
+        self.entities_in_vision = Vec::new();
+    }
 }

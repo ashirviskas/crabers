@@ -43,6 +43,7 @@ pub struct SelectedEntity {
     pub entity: Option<Entity>,
     pub health: f32,
     pub energy: f32,
+    pub generation: u32,
 }
 
 #[derive(Resource)]
