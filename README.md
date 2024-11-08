@@ -57,7 +57,7 @@ Building a WASM build:
 - [ ] Initial implementation of the neural brain with predefined inputs and outputs
   - [ ] Inputs:
     - [ ] Relative speed
-    - [ ] Angle to nearest food
+    - [x] Angle to nearest food
     - [ ] Angle to nearest organism
     - [ ] Genetic closeness
     - [ ] Current energy level
@@ -72,10 +72,7 @@ Building a WASM build:
 - [ ] Cleanup and do all code `TODO`s.
 
 Nice to haves:
-- [ ] WASM Build
-
-## Contributing
-Contributions are welcome! Please read [CONTRIBUTING.md](./CONTRIBUTING.md) for details on our code of conduct, and the process for submitting pull requests to us. TBD
+- [x] WASM Build
 
 ## License
 This project is licensed under the MIT License - see the [LICENSE.md](LICENSE.md) file for details.

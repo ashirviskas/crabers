@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::f32::consts::PI;
 
 use avian2d::prelude::*;
 
@@ -44,6 +45,9 @@ pub struct SelectedEntity {
     pub health: f32,
     pub energy: f32,
     pub generation: u32,
+    pub rotation: Quat,
+    pub vision_rotation: Quat,
+    pub nearest_food_anlge: f32
 }
 
 #[derive(Resource)]
@@ -382,15 +386,28 @@ impl Quadtree {
     }
 }
 
-pub fn full_angle_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
-    let angle = v1.angle_between(v2); // Smallest angle in radians
-    let cross = v1.cross(v2); // Cross product
 
-    if cross.z < 0.0 {
-        // Clockwise direction
-        2.0 * std::f32::consts::PI - angle
+pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
+
+    let v1_2d = Vec2::new(v1.x, v1.y);
+    let v2_2d = Vec2::new(v2.x, v2.y);
+
+    // Calculate the angle between vectors using atan2
+    let mut angle_radians = v2_2d.y.atan2(v2_2d.x) - v1_2d.y.atan2(v1_2d.x);
+
+    // let's turn our vision by 90 degrees
+    // angle_radians += PI * 0.5;
+    // Adjust angle to range [0, 2PI]
+    angle_radians = angle_radians.rem_euclid(2.0 * PI);
+
+    // Normalize the angle to [-1, 1]
+    let normalized_value = if angle_radians <= PI {
+        // [0, PI] maps to [0, +1]
+        angle_radians / PI
     } else {
-        // Counterclockwise direction
-        angle
-    }
+        // [PI, 2PI] maps to [-1, 0]
+        ((angle_radians - PI) / PI) * -1.
+    };
+    // println!("V1: {} V2: {} normalized_value: {}, angle_radians: {}", v1, v2, normalized_value, angle_radians);
+    normalized_value
 }

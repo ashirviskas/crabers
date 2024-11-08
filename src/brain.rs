@@ -3,24 +3,26 @@ use bevy::prelude::*;
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NeuronType {
     // Input
-    AlwaysOn,
-    NearestFoodAngle,
-    NearestFoodDistance,
+    AlwaysOn, // Implemented
+    CraberHealth, // TODO
+    CraberSpeed, // TODO
 
-    NearestCraberAngle,
-    NearestCraberDistance,
+    NearestFoodAngle, // Implemented, value between -1 (left) and +1 (right) corresponding to the angle
+    NearestFoodDistance, // TODO
 
-    NearestWallAngle,
-    NearestWallDistance,
+    NearestCraberAngle, // TODO
+    NearestCraberDistance, // TODO
+
+    NearestWallAngle, // TODO
+    NearestWallDistance, // TODO
     // Interval between each update. TODO: Add cost for higher intervals.
-    BrainInterval,
+    BrainInterval, // TODO
     // Hidden
     Hidden,
     // Output
-    MoveForward,
-    Rotate,
-    ModifyBrainInterval,
-    MoodOutput,
+    MoveForward, // ?
+    Rotate, // WIP
+    ModifyBrainInterval, // TODO
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -31,7 +33,7 @@ pub enum ActivationFunction {
     ReLU,
     LeakyReLU,
     Softmax,
-    AngleToNormalizedValue,
+    // AngleToNormalizedValue,
 }
 
 impl ActivationFunction {
@@ -43,7 +45,7 @@ impl ActivationFunction {
             ActivationFunction::ReLU => value.max(0.0),
             ActivationFunction::LeakyReLU => value.max(0.01 * value),
             ActivationFunction::Softmax => value.exp() / value.exp(),
-            ActivationFunction::AngleToNormalizedValue => Brain::angle_to_normalized_value(value),
+            // ActivationFunction::AngleToNormalizedValue => Brain::angle_to_normalized_value(value),
         }
     }
 }
@@ -64,7 +66,11 @@ pub struct Connection {
     pub bias: f32,      // -1.0 to 1.0
     pub enabled: bool,
 }
-
+/// Craber brain
+/// Neurons are mapped to indexes using this map:
+///     inputs          [0..99]
+///     hidden_layers   [100..199]
+///     outputs         [200..inf]
 #[derive(Component, Debug)]
 pub struct Brain {
     pub inputs: Vec<Neuron>,
@@ -87,6 +93,7 @@ impl Brain {
                 activation_function: ActivationFunction::None,
                 value: 0.0,
             },
+
         ];
         let outputs = vec![
             Neuron {
@@ -102,7 +109,7 @@ impl Brain {
         ];
         let hidden_layers = vec![Neuron {
             neuron_type: NeuronType::Hidden,
-            activation_function: ActivationFunction::AngleToNormalizedValue,
+            activation_function: ActivationFunction::None,
             value: 0.0,
         }];
         let connections = vec![
@@ -126,7 +133,7 @@ impl Brain {
             Connection {
                 from_id: 100,
                 to_id: 201,
-                weight: 1.5, // To make it rotate harder
+                weight: 4.5, // To make it rotate harder
                 bias: 0.0,
                 enabled: true,
             },
@@ -160,21 +167,12 @@ impl Brain {
         }
     }
 
-    // make it go between [-1; +1], negative = left, positive = right
-    pub fn angle_to_normalized_value(angle_radians: f32) -> f32 {
-        let mut normalized_angle = angle_radians / std::f32::consts::PI;
-        if normalized_angle > 1.0 {
-            normalized_angle = -(2.0 - angle_radians)
-        }
-        return normalized_angle
-    }
-
     pub fn update_input(&mut self, input_neuron_type: NeuronType, value: f32) {
-        print!("Updating craber neuron input");
+        // print!("Updating craber neuron input");
         for neuron in self.inputs.iter_mut() {
             if neuron.neuron_type == input_neuron_type {
                 neuron.value = value;
-                println!("Updated neuron type {:?} to value {}", input_neuron_type, value)
+                // println!("Updated neuron type {:?} to value {}", input_neuron_type, value)
             }
         }
     }
@@ -299,7 +297,7 @@ pub struct VisionUpdateTimer(pub Timer);
 #[derive(Component)]
 pub struct Vision {
     pub radius: f32,
-    pub nearest_food_angle_radians: f32,
+    pub nearest_food_direction: f32,
     pub nearest_food_distance: f32,
     pub see_food: bool,
     pub entities_in_vision: Vec<Entity>,
@@ -309,7 +307,7 @@ impl Vision {
     pub fn no_see_food(&mut self) {
         self.see_food = false;
         self.nearest_food_distance = std::f32::MAX;
-        self.nearest_food_angle_radians = std::f32::consts::PI;
+        self.nearest_food_direction = 0.;
         self.entities_in_vision = Vec::new();
     }
 }

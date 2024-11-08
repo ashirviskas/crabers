@@ -16,7 +16,7 @@ pub const SPEED_FACTOR: f32 = 100.0;
 pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
 pub const CRABER_REPRODUCE_ENERGY: f32 = 20.0;
-pub const MAX_CRABERS: usize = 5000;
+pub const MAX_CRABERS: usize = 50;
 pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
 pub enum CraberTexture {
     A,
@@ -170,7 +170,7 @@ pub fn spawn_craber(
             .id();
         let vision = Vision {
             radius: 100.0,
-            nearest_food_angle_radians: 0.0,
+            nearest_food_direction: 0.0,
             nearest_food_distance: 0.0,
             see_food: false,
             entities_in_vision: Vec::new(),
@@ -191,7 +191,8 @@ pub fn spawn_craber(
                     rand_pretty_color
                 ),
                 transform: Transform {
-                    translation: Vec3::new(0., 0., 0.),
+                    translation: Vec3::new(0., 0., 0.1),
+                    rotation: rotation,
                     ..Default::default()
                 },
                 ..Default::default()
