@@ -16,7 +16,8 @@ pub const SPEED_FACTOR: f32 = 100.0;
 pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
 pub const CRABER_REPRODUCE_ENERGY: f32 = 20.0;
-pub const MAX_CRABERS: usize = 50;
+pub const MAX_CRABERS: usize = 10000;
+pub const MAX_CRABERS_SPAWNER: usize = 10;
 pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
 pub enum CraberTexture {
     A,
@@ -47,11 +48,17 @@ pub struct Craber {
 }
 
 #[derive(Component)]
+pub struct Generation{
+    pub generation_id: u32,
+}
+
+#[derive(Component)]
 pub struct Acceleration(pub Vec2);
 
 #[derive(Event)]
 pub struct ReproduceEvent {
     pub entity: Entity,
+    pub generation: Generation,
 }
 
 pub enum VisionEventType {
@@ -75,6 +82,7 @@ pub struct SpawnEvent {
     // pub velocity: Velocity,
     pub roation: Quat,
     pub craber: Craber,
+    pub generation: u32,
 }
 
 #[derive(Resource)]
@@ -117,6 +125,7 @@ pub fn spawn_craber(
     for event in spawn_events.read() {
         let craber = event.craber;
         let position = event.position;
+        let generation = event.generation;
         // let velocity = event.velocity;
         let rotation = event.roation;
         let craber_texture = [
@@ -158,6 +167,7 @@ pub fn spawn_craber(
             // .insert(velocity)
             .insert(Weight { weight: 1.0 })
             .insert(Acceleration(Vec2::new(0.0, -1.0)))
+            .insert(Generation{ generation_id: generation})
             .insert(CollisionLayers::new(
                 [Layer::Craber],
                 [Layer::Food, Layer::Craber, Layer::Wall],
@@ -216,9 +226,13 @@ pub fn craber_spawner(
     time: Res<Time>,
     mut timer: ResMut<CraberSpawnTimer>,
     mut spawn_events: EventWriter<SpawnEvent>,
+    crabers_query: Query<&Craber>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
         for _ in 0..CRABER_SPAWN_MULTIPLIER {
+            if crabers_query.iter().len() >= MAX_CRABERS_SPAWNER {
+                continue;
+            }
             let mut rng = rand::thread_rng();
             let position = Vec3::new(
                 rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
@@ -229,6 +243,7 @@ pub fn craber_spawner(
             spawn_events.send(SpawnEvent {
                 position,
                 roation: rotation,
+                generation: 0,
                 craber: Craber {
                     max_energy: 100.0,
                     max_health: 100.0,
@@ -242,14 +257,15 @@ pub fn craber_spawner(
 
 // Make crabers lose energy over time
 pub fn energy_consumption(
-    mut query: Query<(Entity, &mut Craber, &mut LinearVelocity)>,
+    mut query: Query<(Entity, &mut Craber, &mut LinearVelocity, &Generation)>,
     time: Res<Time>,
     mut reproduce_events: EventWriter<ReproduceEvent>,
 ) {
-    for (entity, mut craber, _velocity) in query.iter_mut() {
+    for (entity, mut craber, _velocity, generation) in query.iter_mut() {
         craber.energy -= ENERGY_CONSUMPTION_RATE * time.delta_seconds();
         if craber.energy >= CRABER_REQUIRED_REPRODUCE_ENERGY {
-            reproduce_events.send(ReproduceEvent { entity });
+            let new_generation = Generation{generation_id: generation.generation_id + 1};
+            reproduce_events.send(ReproduceEvent { entity, generation: new_generation});
         }
         // Handle low energy situations
         if craber.energy <= 0.0 {
@@ -282,6 +298,7 @@ pub fn craber_reproduce(
         spawn_events.send(SpawnEvent {
             position,
             // velocity,
+            generation: event.generation.generation_id,
             roation: rotation,
             craber: Craber {
                 max_energy: 100.0,

@@ -23,6 +23,7 @@ pub enum NeuronType {
     MoveForward, // ?
     Rotate, // WIP
     ModifyBrainInterval, // TODO
+    WantToMate,
 }
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]

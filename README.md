@@ -65,7 +65,7 @@ Building a WASM build:
   - [ ] Outputs:
     - [ ] Forward/backward acceleration
     - [ ] Left/right acceleration
-    - [ ] Rotational acceleration (turning/steering)
+    - [x] Rotational acceleration (turning/steering)
 - [x] Basic environment setup with food source spawning.
 - [ ] Basic growing and maturity system for crabers.
 - [ ] Simple reproduction mechanics without advanced features.

@@ -386,7 +386,7 @@ impl Quadtree {
     }
 }
 
-
+/// To be used only for getting directions for food/other crabers
 pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
 
     let v1_2d = Vec2::new(v1.x, v1.y);

@@ -235,7 +235,7 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
     for mut text in query.iter_mut() {
         if let Some(_) = selected.entity {
             text.sections[0].value = format!(
-                "Health: {:.2}, Energy: {:.2}, Generation: {} nNearest food angle: {}",
+                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}",
                 selected.health, selected.energy, selected.generation, selected.nearest_food_anlge
             );
         } else {
@@ -333,15 +333,16 @@ fn window_to_world(
 
 fn update_selected_entity_info(
     mut selected: ResMut<SelectedEntity>,
-    craber_query: Query<(&Craber, &Transform, Entity, &Children)>,
+    craber_query: Query<(&Craber, &Transform, Entity, &Children, &Generation)>,
     vision_query: Query<(&Vision, &Transform, Entity, &Parent)>,
     food_query: Query<&Food>,
 ) {
     if let Some(entity) = selected.entity {
         // Check if the selected entity is a Craber
-        if let Ok((craber, craber_transform, craber_entity, craber_children)) = craber_query.get(entity) {
+        if let Ok((craber, craber_transform, craber_entity, craber_children, craber_generation)) = craber_query.get(entity) {
             selected.health = craber.health;
             selected.energy = craber.energy;
+            selected.generation = craber_generation.generation_id;
             selected.rotation = craber_transform.rotation;
             for child in craber_children.iter() {
                 if let Ok((vision, vision_transform, _ , entity2_type)) = vision_query.get(*child) {
