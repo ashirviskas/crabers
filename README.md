@@ -53,7 +53,7 @@ Building a WASM build:
 
 ## PoC TODO
 - [x] Basic movement and collision physics for crabers.
-- [ ] Simple genetic system for craber traits.
+- [ ] Simple genetic system for craber traits. WIP
 - [ ] Initial implementation of the neural brain with predefined inputs and outputs
   - [ ] Inputs:
     - [ ] Relative speed
@@ -68,7 +68,10 @@ Building a WASM build:
     - [x] Rotational acceleration (turning/steering)
 - [x] Basic environment setup with food source spawning.
 - [ ] Basic growing and maturity system for crabers.
-- [ ] Simple reproduction mechanics without advanced features.
+- [x] Simple reproduction mechanics without advanced features.
+- [x] Simple evolution/mutation system
+  - [x] Brain mutations
+  - [ ] Other craber qualities mutations
 - [ ] Cleanup and do all code `TODO`s.
 
 Nice to haves:

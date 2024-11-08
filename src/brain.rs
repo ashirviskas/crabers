@@ -1,4 +1,6 @@
 use bevy::prelude::*;
+use rand::Rng;
+use rand::seq::SliceRandom;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NeuronType {
@@ -26,6 +28,40 @@ pub enum NeuronType {
     WantToMate,
 }
 
+impl NeuronType {
+    pub fn random_input_type() -> Self {
+        let input_types = vec![
+            NeuronType::AlwaysOn,
+            NeuronType::CraberHealth,
+            NeuronType::CraberSpeed,
+            NeuronType::NearestFoodAngle,
+            NeuronType::NearestFoodDistance,
+            NeuronType::NearestCraberAngle,
+            NeuronType::NearestCraberDistance,
+            NeuronType::NearestWallAngle,
+            NeuronType::NearestWallDistance,
+            NeuronType::BrainInterval,
+        ];
+        let mut rng = rand::thread_rng();
+        *input_types.choose(&mut rng).unwrap()
+    }
+
+    pub fn random_hidden_type() -> Self {
+        NeuronType::Hidden
+    }
+
+    pub fn random_output_type() -> Self {
+        let output_types = vec![
+            NeuronType::MoveForward,
+            NeuronType::Rotate,
+            NeuronType::ModifyBrainInterval,
+            NeuronType::WantToMate,
+        ];
+        let mut rng = rand::thread_rng();
+        *output_types.choose(&mut rng).unwrap()
+    }
+}
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum ActivationFunction {
     None,
@@ -49,6 +85,18 @@ impl ActivationFunction {
             // ActivationFunction::AngleToNormalizedValue => Brain::angle_to_normalized_value(value),
         }
     }
+    pub fn random() -> Self {
+        let mut rng = rand::thread_rng();
+        match rng.gen_range(0..5) {
+            0 => ActivationFunction::None,
+            1 => ActivationFunction::Sigmoid,
+            2 => ActivationFunction::Tanh,
+            3 => ActivationFunction::ReLU,
+            4 => ActivationFunction::LeakyReLU,
+            5 => ActivationFunction::Softmax,
+            _ => ActivationFunction::None, // Fallback
+        }
+    }
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
@@ -59,7 +107,7 @@ pub struct Neuron {
     pub value: f32,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct Connection {
     pub from_id: usize, // Neuron id. < 100 is input < 200 is hidden < 300 is output.
     pub to_id: usize,   // Neuron id. < 100 is input < 200 is hidden < 300 is output.
@@ -72,7 +120,7 @@ pub struct Connection {
 ///     inputs          [0..99]
 ///     hidden_layers   [100..199]
 ///     outputs         [200..inf]
-#[derive(Component, Debug)]
+#[derive(Component, Debug, Clone)]
 pub struct Brain {
     pub inputs: Vec<Neuron>,
     pub outputs: Vec<Neuron>,
@@ -288,6 +336,75 @@ impl Brain {
                 connection.enabled
             );
         }
+    }
+
+    pub fn new_mutated_brain(&self, mutation_chance: f32, mutation_amount: f32, insertion_chance: f32, deletion_chance: f32) -> Self {
+        let mut mutated_brain = self.clone();
+        let mut rng = rand::thread_rng();
+
+        // Insertion mutations
+        if rng.gen::<f32>() < insertion_chance {
+            // rng between input/hidden/output
+            // TODO. placeholder for only hidden layers
+            match rng.gen_range(0..1) { // TODO Implement outputs insertion
+                0 => {
+                    let new_neuron = Neuron {
+                        neuron_type: NeuronType::random_hidden_type(),
+                        activation_function: ActivationFunction::random(),
+                        value: 0.0,
+                    };
+                    mutated_brain.hidden_layers.push(new_neuron);
+                },
+                1 => {
+                    let new_neuron = Neuron {
+                        neuron_type: NeuronType::random_input_type(),
+                        activation_function: ActivationFunction::random(),
+                        value: 0.0,
+                    };
+                    mutated_brain.inputs.push(new_neuron);
+                },
+                2 => {
+                    let new_neuron = Neuron {
+                        neuron_type: NeuronType::random_output_type(),
+                        activation_function: ActivationFunction::random(),
+                        value: 0.0,
+                    };
+                    mutated_brain.outputs.push(new_neuron);
+                },
+                _ => {}
+            }
+        }
+
+        // Deletion mutations
+        // same as insertion
+
+        for connection in mutated_brain.connections.iter_mut() {
+            // Mutate the weight
+            if rng.gen::<f32>() < mutation_chance {
+                let change = rng.gen_range(-mutation_amount..mutation_amount);
+                connection.weight += change;
+            }
+
+            // Mutate the bias
+            if rng.gen::<f32>() < mutation_chance {
+                let change = rng.gen_range(-mutation_amount..mutation_amount);
+                connection.bias += change;
+            }
+
+            // Optionally, mutate the 'enabled' status
+            if rng.gen::<f32>() < mutation_chance {
+                connection.enabled = !connection.enabled;
+            }
+        }
+
+        // Optionally, mutate neurons (e.g., activation functions)
+        for neuron in mutated_brain.hidden_layers.iter_mut() {
+            if rng.gen::<f32>() < mutation_chance {
+                neuron.activation_function = ActivationFunction::random();
+            }
+        }
+
+        mutated_brain
     }
 }
 

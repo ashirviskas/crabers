@@ -15,10 +15,12 @@ const CRABER_ANGULAR_DAMPING: f32 = 0.9;
 pub const SPEED_FACTOR: f32 = 100.0;
 pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
-pub const CRABER_REPRODUCE_ENERGY: f32 = 20.0;
+pub const CRABER_REPRODUCE_ENERGY: f32 = 40.0;
 pub const MAX_CRABERS: usize = 10000;
 pub const MAX_CRABERS_SPAWNER: usize = 10;
 pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
+pub const CRABER_MUTATION_CHANCE: f32 = 0.05;
+pub const CRABER_MUTATION_AMOUNT: f32 = 0.5;
 pub enum CraberTexture {
     A,
     B,
@@ -59,6 +61,7 @@ pub struct Acceleration(pub Vec2);
 pub struct ReproduceEvent {
     pub entity: Entity,
     pub generation: Generation,
+    // pub brain: &Brain,
 }
 
 pub enum VisionEventType {
@@ -83,6 +86,7 @@ pub struct SpawnEvent {
     pub roation: Quat,
     pub craber: Craber,
     pub generation: u32,
+    pub new_brain: Brain,
 }
 
 #[derive(Resource)]
@@ -250,6 +254,7 @@ pub fn craber_spawner(
                     energy: 100.0,
                     health: 100.0,
                 },
+                new_brain: Brain::default(),
             });
         }
     }
@@ -257,11 +262,11 @@ pub fn craber_spawner(
 
 // Make crabers lose energy over time
 pub fn energy_consumption(
-    mut query: Query<(Entity, &mut Craber, &mut LinearVelocity, &Generation)>,
+    mut query: Query<(Entity, &mut Craber, &mut LinearVelocity, &Generation, &Brain)>,
     time: Res<Time>,
     mut reproduce_events: EventWriter<ReproduceEvent>,
 ) {
-    for (entity, mut craber, _velocity, generation) in query.iter_mut() {
+    for (entity, mut craber, _velocity, generation, brain) in query.iter_mut() {
         craber.energy -= ENERGY_CONSUMPTION_RATE * time.delta_seconds();
         if craber.energy >= CRABER_REQUIRED_REPRODUCE_ENERGY {
             let new_generation = Generation{generation_id: generation.generation_id + 1};
@@ -277,27 +282,28 @@ pub fn energy_consumption(
 
 // TODO: Make reproduction for plants/food? Would need a separate health/energy component
 pub fn craber_reproduce(
-    mut craber_query: Query<(&mut Craber, &Transform)>,
+    mut craber_query: Query<(&mut Craber, &Transform, &Brain)>,
     mut reproduce_events: EventReader<ReproduceEvent>,
     mut spawn_events: EventWriter<SpawnEvent>,
 ) {
     let mut rng = rand::thread_rng();
     for event in reproduce_events.read() {
-        let mut craber = craber_query.get_mut(event.entity).unwrap();
+        let (mut craber, transform, brain) = craber_query.get_mut(event.entity).unwrap();
         // let velocity: Velocity = Velocity::linear(Vec2::new(0., 0.) * SPEED_FACTOR);
 
         // Position offset from parent to the back, first find the angle of the parent
-        let parent_angle = craber.1.rotation.to_axis_angle().1;
+        let parent_angle = transform.rotation.to_axis_angle().1;
         let position_offset = Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 2.0;
-        let position = craber.1.translation + position_offset.extend(0.0);
+        let position = transform.translation + position_offset.extend(0.0);
         // println!("Parent position: {:?}", craber.1.translation);
-        craber.0.energy -= CRABER_REPRODUCE_ENERGY;
+        craber.energy -= CRABER_REPRODUCE_ENERGY;
 
         // Rotation 180 degrees from parent
         let rotation = Quat::from_rotation_z(parent_angle + std::f32::consts::PI);
         spawn_events.send(SpawnEvent {
             position,
             // velocity,
+            new_brain: brain.new_mutated_brain(CRABER_MUTATION_CHANCE, CRABER_MUTATION_AMOUNT, CRABER_MUTATION_CHANCE, CRABER_MUTATION_CHANCE),
             generation: event.generation.generation_id,
             roation: rotation,
             craber: Craber {
