@@ -47,7 +47,8 @@ pub struct SelectedEntity {
     pub generation: u32,
     pub rotation: Quat,
     pub vision_rotation: Quat,
-    pub nearest_food_anlge: f32
+    pub nearest_food_anlge: f32,
+    pub brain_info: String,
 }
 
 #[derive(Resource)]
@@ -99,6 +100,10 @@ pub fn print_current_entity_count(
 
 #[derive(Resource)]
 pub struct ForceApplicationTimer(pub Timer);
+
+#[derive(Resource)]
+pub struct SyncVisionPositionTimer(pub Timer);
+
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub enum EntityType {
@@ -406,7 +411,7 @@ pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
         angle_radians / PI
     } else {
         // [PI, 2PI] maps to [-1, 0]
-        ((angle_radians - PI) / PI) * -1.
+        (1. -((((angle_radians - PI) / PI) * -1.) + 1.)) * -1.
     };
     // println!("V1: {} V2: {} normalized_value: {}, angle_radians: {}", v1, v2, normalized_value, angle_radians);
     normalized_value

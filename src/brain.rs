@@ -142,6 +142,11 @@ impl Brain {
                 activation_function: ActivationFunction::None,
                 value: 0.0,
             },
+            Neuron {
+                neuron_type: NeuronType::NearestFoodDistance,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            }
 
         ];
         let outputs = vec![
@@ -243,6 +248,15 @@ impl Brain {
         }
         rotation
     }
+    pub fn get_forward_acceleration(&self) -> f32 {
+        let mut acceleration = 0.0;
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::MoveForward {
+                acceleration = neuron.value;
+            }
+        }
+        acceleration
+    }
 
     pub fn feed_forward(&mut self) {
         // Input to hidden
@@ -337,13 +351,55 @@ impl Brain {
             );
         }
     }
+    pub fn get_brain_info(&self) -> String {
+        let mut result = String::new();
+    
+        result.push_str("Brain:\n\n");
+        result.push_str("Inputs:\n");
+        for neuron in self.inputs.iter() {
+            result.push_str(&format!(
+                "Neuron type: {:?}, Activation function: {:?}, Value: {}\n",
+                neuron.neuron_type, neuron.activation_function, neuron.value
+            ));
+        }
+    
+        result.push_str("Hidden:\n");
+        for neuron in self.hidden_layers.iter() {
+            result.push_str(&format!(
+                "Neuron type: {:?}, Activation function: {:?}, Value: {}\n",
+                neuron.neuron_type, neuron.activation_function, neuron.value
+            ));
+        }
+    
+        result.push_str("Outputs:\n");
+        for neuron in self.outputs.iter() {
+            result.push_str(&format!(
+                "Neuron type: {:?}, Activation function: {:?}, Value: {}\n",
+                neuron.neuron_type, neuron.activation_function, neuron.value
+            ));
+        }
+    
+        result.push_str("Connections:\n");
+        for connection in self.connections.iter() {
+            result.push_str(&format!(
+                "From: {}, To: {}, Weight: {}, Bias: {}, Enabled: {}\n",
+                connection.from_id,
+                connection.to_id,
+                connection.weight,
+                connection.bias,
+                connection.enabled
+            ));
+        }
+        result
+    }
+    
 
     pub fn new_mutated_brain(&self, mutation_chance: f32, mutation_amount: f32, insertion_chance: f32, deletion_chance: f32) -> Self {
         let mut mutated_brain = self.clone();
         let mut rng = rand::thread_rng();
 
         // Insertion mutations
-        if rng.gen::<f32>() < insertion_chance {
+        if rng.gen_range(0.0..1.) < insertion_chance {
             // rng between input/hidden/output
             // TODO. placeholder for only hidden layers
             match rng.gen_range(0..1) { // TODO Implement outputs insertion
@@ -380,26 +436,26 @@ impl Brain {
 
         for connection in mutated_brain.connections.iter_mut() {
             // Mutate the weight
-            if rng.gen::<f32>() < mutation_chance {
+            if rng.gen_range(0.0..1.) < mutation_chance {
                 let change = rng.gen_range(-mutation_amount..mutation_amount);
                 connection.weight += change;
             }
 
             // Mutate the bias
-            if rng.gen::<f32>() < mutation_chance {
+            if rng.gen_range(0.0..1.) < mutation_chance {
                 let change = rng.gen_range(-mutation_amount..mutation_amount);
                 connection.bias += change;
             }
 
             // Optionally, mutate the 'enabled' status
-            if rng.gen::<f32>() < mutation_chance {
+            if rng.gen_range(0.0..1.) < mutation_chance {
                 connection.enabled = !connection.enabled;
             }
         }
 
         // Optionally, mutate neurons (e.g., activation functions)
         for neuron in mutated_brain.hidden_layers.iter_mut() {
-            if rng.gen::<f32>() < mutation_chance {
+            if rng.gen_range(0.0..1.) < mutation_chance {
                 neuron.activation_function = ActivationFunction::random();
             }
         }

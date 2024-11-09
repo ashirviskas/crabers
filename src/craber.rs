@@ -8,7 +8,7 @@ use crate::common::*;
 
 use crate::brain::*;
 
-const ENERGY_CONSUMPTION_RATE: f32 = 0.15;
+const ENERGY_CONSUMPTION_RATE: f32 = 0.35;
 const CRABER_MASS: f32 = 0.5;
 const CRABER_INERTIA: f32 = 0.05;
 const CRABER_ANGULAR_DAMPING: f32 = 0.9;
@@ -179,7 +179,7 @@ pub fn spawn_craber(
             // .insert(ActiveEvents::COLLISION_EVENTS)
             // .insert(ExternalForce::new(Vec2::Y).with_persistence(true),)
             .insert(Friction::new(0.3))
-            .insert(Brain::default())
+            .insert(event.new_brain.clone())
             .insert(EntityType::Craber)
             .id();
         let vision = Vision {
@@ -214,7 +214,7 @@ pub fn spawn_craber(
             .insert(CollisionLayers::new([Layer::Vision], [Layer::Food]))
             // .insert(CollisionLayers::new([Layer::Food], [Layer::Vision]))
             .insert(vision)
-            .insert(Weight { weight: 1.0 })
+            .insert(Weight { weight: 0.0 })
             // .insert()
 
             .insert(EntityType::Vision)

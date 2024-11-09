@@ -24,10 +24,9 @@ use common::{
 
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
-const FOOD_SPAWN_RATE: f32 = 0.01;
+const FOOD_SPAWN_RATE: f32 = 0.04;
 const CRABER_SPAWN_RATE: f32 = 0.1;
 
-const MAX_CRABER_COUNT: usize = 10000;
 const MAX_FOOD_COUNT: usize = 10000;
 
 const WALL_THICKNESS: f32 = 60.0;
@@ -96,6 +95,7 @@ fn main() {
         .add_systems(Update, apply_acceleration)
         .add_systems(Update, vision_update)
         .add_systems(Update, brain_update)
+        // .add_systems(Update, vision_inherit_craber_transform)
         // Fun and debug stuff
         // .add_systems(Update, ravers)
         .run();
@@ -145,6 +145,14 @@ fn setup(mut commands: Commands) {
 
     commands.insert_resource(VisionUpdateTimer(Timer::from_seconds(
         VISION_UPDATE_RATE,
+        TimerMode::Repeating,
+    )));
+    commands.insert_resource(SyncVisionPositionTimer(Timer::from_seconds(
+        0.1,
+        TimerMode::Repeating,
+    )));
+    commands.insert_resource(InformationTimer(Timer::from_seconds(
+        0.1,
         TimerMode::Repeating,
     )));
 
@@ -235,8 +243,8 @@ fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
     for mut text in query.iter_mut() {
         if let Some(_) = selected.entity {
             text.sections[0].value = format!(
-                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}",
-                selected.health, selected.energy, selected.generation, selected.nearest_food_anlge
+                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}\nBrain: {}",
+                selected.health, selected.energy, selected.generation, selected.nearest_food_anlge, selected.brain_info
             );
         } else {
             text.sections[0].value = "No craber selected".to_string();
@@ -333,17 +341,18 @@ fn window_to_world(
 
 fn update_selected_entity_info(
     mut selected: ResMut<SelectedEntity>,
-    craber_query: Query<(&Craber, &Transform, Entity, &Children, &Generation)>,
+    craber_query: Query<(&Craber, &Transform, Entity, &Children, &Generation, &Brain)>,
     vision_query: Query<(&Vision, &Transform, Entity, &Parent)>,
     food_query: Query<&Food>,
 ) {
     if let Some(entity) = selected.entity {
         // Check if the selected entity is a Craber
-        if let Ok((craber, craber_transform, craber_entity, craber_children, craber_generation)) = craber_query.get(entity) {
+        if let Ok((craber, craber_transform, craber_entity, craber_children, craber_generation, brain)) = craber_query.get(entity) {
             selected.health = craber.health;
             selected.energy = craber.energy;
             selected.generation = craber_generation.generation_id;
             selected.rotation = craber_transform.rotation;
+            selected.brain_info = brain.get_brain_info();
             for child in craber_children.iter() {
                 if let Ok((vision, vision_transform, _ , entity2_type)) = vision_query.get(*child) {
                     selected.vision_rotation = vision_transform.rotation;
@@ -481,7 +490,7 @@ fn apply_acceleration(
             .rotation
             .mul_vec3(acceleration.0.extend(0.0) * 100.);
         let force_2d = Vec2::new(force.x, force.y);
-        linear_velocity.0 = force_2d;
+        linear_velocity.0 = force_2d * brain.get_forward_acceleration();
 
         // Debug, apply rotation as force
         // external_force.apply_force(Vec2::new(rotation_vector * 100., 0.));
@@ -492,8 +501,8 @@ fn apply_acceleration(
 
 pub fn vision_update(
     mut query: Query<(&mut Vision, &Transform, &Collider, &Parent)>,
-    mut food_query: Query<(&mut Food, &Transform)>,
-    craber_query: Query<(&Craber, &Transform)>,
+    // mut food_query: Query<(&mut Food, &Transform)>,
+    // craber_query: Query<(&Craber, &Transform)>,
     mut vision_events: EventReader<VisionEvent>,
 ) {
     // add or remove food from vision
@@ -514,7 +523,7 @@ pub fn vision_update(
                             for contact in &manifold.contacts {
                                 if vision_event.entity_id == 1 {
                                     // Compute the distance to the circle's center
-                                    let distance = contact.point1.length();
+                                    let distance = contact.point1.length() - contact.penetration;
 
                                     // Update the closest manifold if this distance is smaller
                                     if distance < min_distance {
@@ -523,7 +532,7 @@ pub fn vision_update(
                                     }
                                 }
                                 else {
-                                    let distance = contact.point2.length();
+                                    let distance = contact.point2.length() - contact.penetration;
 
                                     // Update the closest manifold if this distance is smaller
                                     if distance < min_distance {
@@ -568,8 +577,11 @@ pub fn brain_update(
                 // println!("Brain before: {}", )
                 brain.update_input(
                     NeuronType::NearestFoodAngle,
-                    // vision_query.get(children[0]).unwrap().0.nearest_food_angle_radians,
                     vision.nearest_food_direction
+                );
+                brain.update_input(
+                    NeuronType::NearestFoodDistance,
+                     vision.nearest_food_distance
                 );
                 vision.no_see_food();
             } else {
@@ -579,5 +591,20 @@ pub fn brain_update(
         }
         brain.feed_forward();
         // brain.print_brain();
+    }
+}
+
+pub fn vision_inherit_craber_transform(
+    query: Query<(&Craber, &LinearVelocity, &AngularVelocity, &Children), Without<Vision>>,
+    mut vision_query: Query<(&mut LinearVelocity, &mut AngularVelocity), With<Vision>>,
+    time: Res<Time>,
+    mut timer: ResMut<SyncVisionPositionTimer>,
+) {
+    for (craber, linear_velocity, angular_velocity, children) in query.iter() {
+        let (mut vision_linear_velocity, mut vision_angular_velocity) = vision_query.get_mut(children[0]).unwrap();
+            // vision_transform.clone_from(transform);
+            vision_linear_velocity.x = linear_velocity.x;
+            vision_linear_velocity.y = linear_velocity.y;
+            vision_angular_velocity.0 = angular_velocity.0;
     }
 }
