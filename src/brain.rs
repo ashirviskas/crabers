@@ -402,7 +402,7 @@ impl Brain {
         if rng.gen_range(0.0..1.) < insertion_chance {
             // rng between input/hidden/output
             // TODO. placeholder for only hidden layers
-            match rng.gen_range(0..1) { // TODO Implement outputs insertion
+            match rng.gen_range(0..2) { // TODO Implement outputs insertion
                 0 => {
                     let new_neuron = Neuron {
                         neuron_type: NeuronType::random_hidden_type(),
@@ -429,6 +429,58 @@ impl Brain {
                 },
                 _ => {}
             }
+        }
+        // insertion of connection
+        if rng.gen_range(0.0..1.) < insertion_chance {
+            let from_a = rng.gen_range(0..mutated_brain.inputs.len());
+            let from_b = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+            let mut new_connection = Connection {
+                from_id: 0, // Initial placeholder value
+                to_id: 0,   // Initial placeholder value
+                weight: 0.0, // Initial placeholder value
+                bias: 0.0,   // Initial placeholder value
+                enabled: false, // Initial placeholder value
+            };
+            match rng.gen_range(0..2)
+            {
+                0 => {
+                    let to_a = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    let to_b = rng.gen_range(0..mutated_brain.outputs.len()) + 200;
+                    match rng.gen_range(0..2) {
+                        0 => {
+                            new_connection = Connection {
+                                from_id: from_a,
+                                to_id: to_a,
+                                weight: rng.gen_range(-1.0..1.0),
+                                bias: rng.gen_range(-1.0..1.0),
+                                enabled: true,
+                            };
+                        },
+                        1 | _ => {
+                            new_connection = Connection {
+                                from_id: from_a,
+                                to_id: to_b,
+                                weight: rng.gen_range(-1.0..1.0),
+                                bias: rng.gen_range(-1.0..1.0),
+                                enabled: true,
+                            };
+                        },
+                        
+                    }
+                },
+                1 | _ => {
+                    let to_b = rng.gen_range(0..self.outputs.len()) + 200;
+                    new_connection = Connection {
+                        from_id: from_b,
+                        to_id: to_b,
+                        weight: rng.gen_range(-1.0..1.0),
+                        bias: rng.gen_range(-1.0..1.0),
+                        enabled: true,
+                    };
+                        
+                }
+            }
+            mutated_brain.connections.push(new_connection);
         }
 
         // Deletion mutations
