@@ -88,7 +88,7 @@ fn main() {
         .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, craber_reproduce)
         // .add_systems(Update, update_craber_color)
-        .add_systems(Update, print_current_entity_count)
+        // .add_systems(Update, print_current_entity_count)
         .add_systems(Update, do_collision)
         // .add_systems(Update, do_decollisions)
         .add_systems(Update, do_despawning)
@@ -496,7 +496,7 @@ fn apply_acceleration(
         let force_2d = Vec2::new(force.x, force.y);
         let brain_forward_acceleration = brain.get_forward_acceleration();
         linear_velocity.0 = force_2d * brain_forward_acceleration;
-        let energy_lost = brain_forward_acceleration.powi(2) * CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER;
+        let energy_lost = brain_forward_acceleration.abs().powf(1.2) * CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER;
         lose_energy_events.send(LoseEnergyEvent{
             entity, energy_lost
         });
@@ -605,7 +605,6 @@ pub fn brain_update(
 pub fn craber_lose_energy(mut lose_energy_events: EventReader<LoseEnergyEvent>, mut query: Query<&mut Craber>)
 {
     for lose_energy_event in lose_energy_events.read() {
-        println!("Losing energy!");
         query.get_mut(lose_energy_event.entity).unwrap().energy -= lose_energy_event.energy_lost;
     }
 }
