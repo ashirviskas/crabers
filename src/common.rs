@@ -411,7 +411,7 @@ pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
         angle_radians / PI
     } else {
         // [PI, 2PI] maps to [-1, 0]
-        (1. -((((angle_radians - PI) / PI) * -1.) + 1.)) * -1.
+        (1. +((((angle_radians - PI) / PI) * -1.))) * -1.
     };
     // println!("V1: {} V2: {} normalized_value: {}, angle_radians: {}", v1, v2, normalized_value, angle_radians);
     normalized_value

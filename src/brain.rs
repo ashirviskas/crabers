@@ -221,6 +221,16 @@ impl Brain {
         }
     }
 
+    pub fn set_neuron_value(&mut self, id: usize, new_value: f32) {
+        if id < 100 {
+            self.inputs[id].value = new_value;
+        } else if id < 200 {
+            self.hidden_layers[id - 100].value = new_value;
+        } else if id < 300 {
+            self.outputs[id - 200].value = new_value;
+        }
+    }
+
     pub fn update_input(&mut self, input_neuron_type: NeuronType, value: f32) {
         // print!("Updating craber neuron input");
         for neuron in self.inputs.iter_mut() {
@@ -259,26 +269,26 @@ impl Brain {
     }
 
     pub fn feed_forward(&mut self) {
+        // Reset outputs and hidden
+        for output_id in 0..self.outputs.len() {
+            self.outputs[output_id].value = 0.0;
+        }
+        for hidden_id in 0..self.hidden_layers.len() {
+            self.hidden_layers[hidden_id].value = 0.0;
+        }
         // Input to hidden
         for connection_id in 0..self.connections.len() {
             let connection = &self.connections[connection_id];
             if !connection.enabled {
                 continue;
             }
-            if connection.from_id > 100 {
+            if connection.from_id >= 100 {
                 continue;
             }
             let from_neuron = self.get_neuron(connection.from_id).unwrap();
             let to_neuron = self.get_neuron(connection.to_id).unwrap().clone();
-            // to_neuron.value += from_neuron.value * connection.weight + connection.bias;
-            let new_to_neuron_value = from_neuron.value * connection.weight + connection.bias;
-            let new_to_neuron = Neuron {
-                neuron_type: to_neuron.neuron_type,
-                activation_function: to_neuron.activation_function,
-                value: new_to_neuron_value,
-            };
-            self.set_neuron(connection.to_id, new_to_neuron);
-            // self.update_neuron(connection.to_id, new_to_neuron_value);
+            let new_value = to_neuron.value + from_neuron.value * connection.weight + connection.bias;
+            self.set_neuron_value(connection.to_id, new_value);
         }
         // Hidden functions
         for neuron in self.hidden_layers.iter_mut() {
@@ -290,20 +300,13 @@ impl Brain {
             if !connection.enabled {
                 continue;
             }
-            if connection.from_id < 100 || connection.from_id > 200 {
+            if connection.from_id < 100 || connection.from_id >= 200 {
                 continue;
             }
             let from_neuron = self.get_neuron(connection.from_id).unwrap();
             let to_neuron = self.get_neuron(connection.to_id).unwrap().clone();
-            // to_neuron.value += from_neuron.value * connection.weight + connection.bias;
-            let new_to_neuron_value = from_neuron.value * connection.weight + connection.bias;
-            let new_to_neuron = Neuron {
-                neuron_type: to_neuron.neuron_type,
-                activation_function: to_neuron.activation_function,
-                value: new_to_neuron_value,
-            };
-            self.set_neuron(connection.to_id, new_to_neuron);
-            // self.update_neuron(connection.to_id, new_to_neuron_value);
+            let new_value = to_neuron.value + from_neuron.value * connection.weight + connection.bias;
+            self.set_neuron_value(connection.to_id, new_value);
         }
         for neuron in self.outputs.iter_mut() {
             neuron.value = neuron.activation_function.calculate(neuron.value);
