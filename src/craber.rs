@@ -8,7 +8,7 @@ use crate::common::*;
 
 use crate::brain::*;
 
-const ENERGY_CONSUMPTION_RATE: f32 = 0.35;
+const ENERGY_CONSUMPTION_RATE: f32 = 0.15;
 const CRABER_MASS: f32 = 0.5;
 const CRABER_INERTIA: f32 = 0.05;
 const CRABER_ANGULAR_DAMPING: f32 = 0.9;
@@ -21,6 +21,8 @@ pub const MAX_CRABERS_SPAWNER: usize = 10;
 pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
 pub const CRABER_MUTATION_CHANCE: f32 = 0.05;
 pub const CRABER_MUTATION_AMOUNT: f32 = 0.5;
+
+pub const CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER: f32 = 0.1;
 pub enum CraberTexture {
     A,
     B,
@@ -88,6 +90,13 @@ pub struct SpawnEvent {
     pub generation: u32,
     pub new_brain: Brain,
 }
+
+#[derive(Event)]
+pub struct LoseEnergyEvent {
+    pub entity: Entity,
+    pub energy_lost: f32,
+}
+
 
 #[derive(Resource)]
 pub struct CraberSpawnTimer(pub Timer);

@@ -75,6 +75,7 @@ fn main() {
         .add_event::<SpawnEvent>()
         .add_event::<ReproduceEvent>()
         .add_event::<VisionEvent>()
+        .add_event::<LoseEnergyEvent>()
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, entity_selection)
@@ -95,6 +96,8 @@ fn main() {
         .add_systems(Update, apply_acceleration)
         .add_systems(Update, vision_update)
         .add_systems(Update, brain_update)
+        .add_systems(Update, craber_lose_energy)
+
         // .add_systems(Update, vision_inherit_craber_transform)
         // Fun and debug stuff
         // .add_systems(Update, ravers)
@@ -462,12 +465,13 @@ fn apply_acceleration(
     )>,
     time: Res<Time>,
     mut timer: ResMut<ForceApplicationTimer>,
+    mut lose_energy_events: EventWriter<LoseEnergyEvent>,
 ) {
     if !timer.0.tick(time.delta()).just_finished() {
         return;
     }
     for (
-        _,
+        entity,
         mut linear_velocity,
         mut angular_velocity,
         acceleration,
@@ -490,8 +494,12 @@ fn apply_acceleration(
             .rotation
             .mul_vec3(acceleration.0.extend(0.0) * 100.);
         let force_2d = Vec2::new(force.x, force.y);
-        linear_velocity.0 = force_2d * brain.get_forward_acceleration();
-
+        let brain_forward_acceleration = brain.get_forward_acceleration();
+        linear_velocity.0 = force_2d * brain_forward_acceleration;
+        let energy_lost = brain_forward_acceleration.powi(2) * CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER;
+        lose_energy_events.send(LoseEnergyEvent{
+            entity, energy_lost
+        });
         // Debug, apply rotation as force
         // external_force.apply_force(Vec2::new(rotation_vector * 100., 0.));
         // linear_velocity.0 += rotation_vector * 100.;
@@ -591,6 +599,14 @@ pub fn brain_update(
         }
         brain.feed_forward();
         // brain.print_brain();
+    }
+}
+
+pub fn craber_lose_energy(mut lose_energy_events: EventReader<LoseEnergyEvent>, mut query: Query<&mut Craber>)
+{
+    for lose_energy_event in lose_energy_events.read() {
+        println!("Losing energy!");
+        query.get_mut(lose_energy_event.entity).unwrap().energy -= lose_energy_event.energy_lost;
     }
 }
 
