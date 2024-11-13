@@ -212,7 +212,7 @@ pub fn spawn_craber(
             .insert(Generation{ generation_id: generation})
             .insert(CollisionLayers::new(
                 [Layer::Craber],
-                [Layer::Food, Layer::Craber, Layer::Wall],
+                [Layer::Food, Layer::Craber, Layer::Wall, Layer::Vision],
             ))
             // .insert(ActiveEvents::COLLISION_EVENTS)
             // .insert(ExternalForce::new(Vec2::Y).with_persistence(true),)
@@ -335,7 +335,7 @@ pub fn craber_reproduce(
 
             // Position offset from parent to the back, first find the angle of the parent
             let parent_angle = transform.rotation.to_axis_angle().1;
-            let position_offset = Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 2.0;
+            let position_offset = Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 5.0;
             let position = transform.translation + position_offset.extend(0.0);
             // println!("Parent position: {:?}", craber.1.translation);
             // energy.energy -= CRABER_REPRODUCE_ENERGY;

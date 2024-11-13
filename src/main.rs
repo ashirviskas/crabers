@@ -88,15 +88,16 @@ fn main() {
         .add_systems(Update, craber_spawner)
         .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
+        .add_systems(Update, do_collision)
+        .add_systems(Update, do_craber_collision)
         .add_systems(Update, craber_reproduce)
         // .add_systems(Update, update_craber_color)
         // .add_systems(Update, print_current_entity_count)
-        .add_systems(Update, do_collision)
-        .add_systems(Update, do_craber_collision)
+
         // .add_systems(Update, do_decollisions)
         .add_systems(Update, spawn_craber)
-        .add_systems(Update, apply_acceleration)
         .add_systems(Update, vision_update)
+        .add_systems(Update, apply_acceleration)
         .add_systems(Update, brain_update)
         .add_systems(Update, craber_lose_energy)
         .add_systems(Update, craber_lose_health)
@@ -482,8 +483,14 @@ pub fn do_craber_collision(
         if let Ok((entity_a, brain_a)) = query.get(craber_collision_event.entity_a) {
             if let Ok((entity_b, brain_b)) = query.get(craber_collision_event.entity_b) {
                 if brain_a.get_want_to_attack() > 0. || brain_b.get_want_to_attack() > 0. {
-                    let energy_lost_a = brain_b.get_want_to_attack() * 10.;
-                    let energy_lost_b = brain_a.get_want_to_attack() * 10.;
+                    let mut energy_lost_a = brain_b.get_want_to_attack() * 5.;
+                    let mut energy_lost_b = brain_a.get_want_to_attack() * 5.;
+                    if energy_lost_a < 0. {
+                        energy_lost_a = 0.;
+                    }
+                    if energy_lost_b < 0. {
+                        energy_lost_b = 0.;
+                    }
                     lose_health_events.send(LoseHealthEvent{entity: entity_a, health_lost: energy_lost_a});
                     lose_health_events.send(LoseHealthEvent{entity: entity_b, health_lost: energy_lost_b});
                     // // hack to actually get energy
