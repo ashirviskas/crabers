@@ -542,7 +542,9 @@ fn apply_acceleration(
             // negative - counter clockwise, positive - clockwise
             angular_velocity.0 = -rotation_vector;
             // stupid workaround for vision decay, should be moved into the brain or a separate vision system
+            // TODO Fix it
             brain.update_input(NeuronType::NearestFoodAngle, 0.0);
+            brain.update_input(NeuronType::NearestCraberAngle, 0.0);
             brain.feed_forward();
 
         }

@@ -18,8 +18,8 @@ pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
 pub const CRABER_REPRODUCE_ENERGY: f32 = 40.0;
 pub const MAX_CRABERS: usize = 5000;
-pub const MAX_CRABERS_SPAWNER: usize = 5000;
-pub const CRABER_SPAWN_MULTIPLIER: usize = 100;
+pub const MAX_CRABERS_SPAWNER: usize = 10;
+pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
 pub const CRABER_MUTATION_CHANCE: f32 = 0.05;
 pub const CRABER_MUTATION_AMOUNT: f32 = 0.5;
 
