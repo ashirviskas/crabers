@@ -51,27 +51,46 @@ Building a WASM build:
 - **Pheromone System:** An experimental feature for inter-craber communication and interaction.
 - **Horizontal Gene Transfer:** Crabers can transfer genetic information to other crabers through a "gene transfer" action that might happen if both parties are willing and bump into each other [TBD].
 
-## PoC TODO
+## TODO
 - [x] Basic movement and collision physics for crabers.
 - [ ] Simple genetic system for craber traits. WIP
-- [ ] Initial implementation of the neural brain with predefined inputs and outputs
+  - [ ] Dominant/recessive genes code for brain
+  - [ ] Genes code for and other traits
+    - [ ] Size
+    - [ ] Aging (no max age? But allow for evolution to implement some dying mechanism, either via brain outputs to kill itself or something else)
+    - [ ] Max health (costs for max health?)
+    - [ ] Max energy (costs for max energy?)
+    - [ ] Power (for speed)
+- [x] Initial implementation of the neural brain with predefined inputs and outputs
   - [ ] Inputs:
-    - [ ] Relative speed
+    - [ ] Speed
     - [x] Angle to nearest food
     - [ ] Angle to nearest organism
     - [ ] Genetic closeness
     - [ ] Current energy level
     - [ ] Health
   - [ ] Outputs:
-    - [ ] Forward/backward acceleration
-    - [ ] Left/right acceleration
+    - [x] Forward/backward acceleration
+    - [ ] Left/right acceleration / strafing
     - [x] Rotational acceleration (turning/steering)
 - [x] Basic environment setup with food source spawning.
 - [ ] Basic growing and maturity system for crabers.
 - [x] Simple reproduction mechanics without advanced features.
+- [ ] Sexual reproduction
+  - [ ] Brain modifications
+  - [ ] Reproduction modifications
 - [x] Simple evolution/mutation system
   - [x] Brain mutations
   - [ ] Other craber qualities mutations
+- [ ] Damage system
+  - [ ] Bite/Attack
+  - [ ] Defend
+- [ ] Drop food when die
+- [ ] More complex brain
+  - [ ] Ability to enable/disable connections
+  - [ ] Brain costs energy (neurons, inputs, connections cost passively, each feed forward - actively)
+  - [ ] Control brain *clock speed* (need a better name)
+- [ ] Improve speed for higher number of crabers (simulation should support at least 5k on a modern system, with up to 10k (as per tests, should be viable))
 - [ ] Cleanup and do all code `TODO`s.
 
 Nice to haves:

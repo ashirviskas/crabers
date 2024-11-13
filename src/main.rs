@@ -24,7 +24,7 @@ use common::{
 
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
-const FOOD_SPAWN_RATE: f32 = 0.04;
+const FOOD_SPAWN_RATE: f32 = 0.0004;
 const CRABER_SPAWN_RATE: f32 = 0.1;
 
 const MAX_FOOD_COUNT: usize = 10000;
@@ -76,6 +76,8 @@ fn main() {
         .add_event::<ReproduceEvent>()
         .add_event::<VisionEvent>()
         .add_event::<LoseEnergyEvent>()
+        .add_event::<LoseHealthEvent>()
+        .add_event::<CraberCollisionEvent>()
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, entity_selection)
@@ -90,13 +92,18 @@ fn main() {
         // .add_systems(Update, update_craber_color)
         // .add_systems(Update, print_current_entity_count)
         .add_systems(Update, do_collision)
+        .add_systems(Update, do_craber_collision)
         // .add_systems(Update, do_decollisions)
-        .add_systems(Update, do_despawning)
         .add_systems(Update, spawn_craber)
         .add_systems(Update, apply_acceleration)
         .add_systems(Update, vision_update)
         .add_systems(Update, brain_update)
         .add_systems(Update, craber_lose_energy)
+        .add_systems(Update, craber_lose_health)
+        .add_systems(Update, do_despawning)
+
+
+
 
         // .add_systems(Update, vision_inherit_craber_transform)
         // Fun and debug stuff
@@ -344,15 +351,15 @@ fn window_to_world(
 
 fn update_selected_entity_info(
     mut selected: ResMut<SelectedEntity>,
-    craber_query: Query<(&Craber, &Transform, Entity, &Children, &Generation, &Brain)>,
+    craber_query: Query<(&Transform, &Children, &Generation, &Brain, &Health, &Energy)>,
     vision_query: Query<(&Vision, &Transform, Entity, &Parent)>,
     food_query: Query<&Food>,
 ) {
     if let Some(entity) = selected.entity {
         // Check if the selected entity is a Craber
-        if let Ok((craber, craber_transform, craber_entity, craber_children, craber_generation, brain)) = craber_query.get(entity) {
-            selected.health = craber.health;
-            selected.energy = craber.energy;
+        if let Ok((craber_transform, craber_children, craber_generation, brain, health, energy)) = craber_query.get(entity) {
+            selected.health = health.health;
+            selected.energy = energy.energy;
             selected.generation = craber_generation.generation_id;
             selected.rotation = craber_transform.rotation;
             selected.brain_info = brain.get_brain_info();
@@ -376,10 +383,12 @@ fn do_collision(
     _commands: Commands,
     mut collide_event_reader: EventReader<Collision>,
     query: Query<(Entity, &Transform, &EntityType)>,
-    mut craber_query: Query<(Entity, &mut Craber)>,
+    mut craber_query: Query<(Entity, &mut Energy)>,
     food_query: Query<(Entity, &mut Food, &Transform)>,
     mut despawn_events: EventWriter<DespawnEvent>,
     mut vision_events: EventWriter<VisionEvent>,
+    mut craber_collision_events: EventWriter<CraberCollisionEvent>,
+
 ) {
     for Collision(contact) in collide_event_reader.read() {
         let entity1 = contact.entity1;
@@ -389,7 +398,7 @@ fn do_collision(
             if let Ok((entity2, _, entity2_type)) = query.get(entity2) {
                 match (entity1_type, entity2_type) {
                     (EntityType::Craber, EntityType::Craber) => {
-                        continue;
+                        craber_collision_events.send(CraberCollisionEvent{entity_a: entity1, entity_b: entity2});
                     }
                     (EntityType::Craber, EntityType::Food) => {
                         if let Ok(mut craber) = craber_query.get_mut(entity1) {
@@ -413,7 +422,7 @@ fn do_collision(
                         vision_events.send(VisionEvent {
                             vision_entity: entity2,
                             entity: entity1,
-                            event_type: VisionEventType::Entered,
+                            event_type: VisionEventType::Food,
                             entity_id: 2,
                             manifolds: manifolds.clone(),
                         });
@@ -424,7 +433,29 @@ fn do_collision(
                         vision_events.send(VisionEvent {
                             vision_entity: entity1,
                             entity: entity2,
-                            event_type: VisionEventType::Entered,
+                            event_type: VisionEventType::Food,
+                            entity_id: 1,
+                            manifolds: manifolds.clone(),
+                        });
+                        // println!("B Food with entity {:?} entered vision", entity2);
+                        // println!("Food entered vision B");
+                    }
+                    (EntityType::Craber, EntityType::Vision) => { // Do entered vision instead and start tracking
+                        vision_events.send(VisionEvent {
+                            vision_entity: entity2,
+                            entity: entity1,
+                            event_type: VisionEventType::Craber,
+                            entity_id: 2,
+                            manifolds: manifolds.clone(),
+                        });
+                        // println!("A CRABER WITH entity {:?} entered vision", entity1);
+                        // println!("Food entered vision A");
+                    }
+                    (EntityType::Vision, EntityType::Craber) => {
+                        vision_events.send(VisionEvent {
+                            vision_entity: entity1,
+                            entity: entity2,
+                            event_type: VisionEventType::Craber,
                             entity_id: 1,
                             manifolds: manifolds.clone(),
                         });
@@ -437,6 +468,31 @@ fn do_collision(
                 }
             }
         }
+    }
+}
+
+pub fn do_craber_collision(
+    mut craber_collision_events: EventReader<CraberCollisionEvent>,
+    query: Query<(Entity, &Brain)>,
+    mut lose_energy_events: EventWriter<LoseEnergyEvent>,
+    mut lose_health_events: EventWriter<LoseHealthEvent>
+
+) {
+    for craber_collision_event in craber_collision_events.read() {
+        if let Ok((entity_a, brain_a)) = query.get(craber_collision_event.entity_a) {
+            if let Ok((entity_b, brain_b)) = query.get(craber_collision_event.entity_b) {
+                if brain_a.get_want_to_attack() > 0. || brain_b.get_want_to_attack() > 0. {
+                    let energy_lost_a = brain_b.get_want_to_attack() * 10.;
+                    let energy_lost_b = brain_a.get_want_to_attack() * 10.;
+                    lose_health_events.send(LoseHealthEvent{entity: entity_a, health_lost: energy_lost_a});
+                    lose_health_events.send(LoseHealthEvent{entity: entity_b, health_lost: energy_lost_b});
+                    // // hack to actually get energy
+                    lose_energy_events.send(LoseEnergyEvent{entity: entity_a, energy_lost: -energy_lost_b});
+                    lose_energy_events.send(LoseEnergyEvent{entity: entity_b, energy_lost: -energy_lost_a});
+
+                }
+        }
+    }
     }
 }
 
@@ -494,8 +550,12 @@ fn apply_acceleration(
             .rotation
             .mul_vec3(acceleration.0.extend(0.0) * 100.);
         let force_2d = Vec2::new(force.x, force.y);
-        let brain_forward_acceleration = brain.get_forward_acceleration();
-        linear_velocity.0 = force_2d * brain_forward_acceleration;
+        let mut brain_forward_acceleration = brain.get_forward_acceleration();
+        if brain_forward_acceleration > 10. {
+            brain_forward_acceleration = 9.99;
+        }
+        let new_velocity = force_2d * brain_forward_acceleration;
+        linear_velocity.0 = new_velocity;
         let energy_lost = brain_forward_acceleration.abs().powf(1.2) * CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER;
         lose_energy_events.send(LoseEnergyEvent{
             entity, energy_lost
@@ -516,7 +576,7 @@ pub fn vision_update(
     // add or remove food from vision
     for vision_event in vision_events.read() {
         match vision_event.event_type {
-            VisionEventType::Entered => {
+            VisionEventType::Food => {
                     // println!("Enterantation happened!");
                     if let Ok((mut vision, transform, collider, parent)) =
                         query.get_mut(vision_event.vision_entity)
@@ -565,6 +625,55 @@ pub fn vision_update(
 
                     }
             }
+            VisionEventType::Craber => {
+                // println!("Enterantation happened!");
+                if let Ok((mut vision, transform, collider, parent)) =
+                    query.get_mut(vision_event.vision_entity)
+                {
+                    // println!("See food true");
+                    let manifolds = &vision_event.manifolds;
+                    // let mut closest_manifold: Option<&ContactManifold> = None;
+                    let mut min_distance = f32::MAX;
+                    let mut closest_point = Vec2::new(0.0, 0.0);
+
+                    for manifold in manifolds {
+                        for contact in &manifold.contacts {
+                            if vision_event.entity_id == 1 {
+                                // Compute the distance to the circle's center
+                                let distance = contact.point1.length() - contact.penetration;
+
+                                // Update the closest manifold if this distance is smaller
+                                if distance < min_distance {
+                                    min_distance = distance;
+                                    closest_point = contact.point1;
+                                }
+                            }
+                            else {
+                                let distance = contact.point2.length() - contact.penetration;
+
+                                // Update the closest manifold if this distance is smaller
+                                if distance < min_distance {
+                                    min_distance = distance;
+                                    closest_point = contact.point2;
+                                }
+                            }
+                        }
+                        // println!("Doing some Manifolds {} {}", min_distance, closest_point)
+                    }
+                    // Normalizing
+                    closest_point = closest_point / min_distance;
+                    vision.entities_in_vision.push(vision_event.entity);
+                    // let craber_transform = craber_query.get(parent.get()).unwrap().1;
+                    // let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
+                    let vision_direction = transform.rotation.mul_vec3(Vec3::Y);
+                    let craber_direction = vision_direction;
+                    vision.nearest_craber_distance = min_distance;
+                    vision.nearest_craber_direction = angle_direction_between_vectors(craber_direction, Vec3::new(closest_point.x, closest_point.y, 0.));
+                    vision.see_craber = true;
+                    // println!("STUFF craber transform: {:?}, D {} Closest P {}  Radians {}", craber_transform, craber_direction, closest_point, vision.nearest_food_direction)
+
+                }
+        }
             _ => {}
         }
     }
@@ -596,30 +705,46 @@ pub fn brain_update(
                 // decay vision
 
                 // brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
-        }
+            }
+            if vision.see_craber {
+                // println!("See food! {:?} C: {:?}", brain, craber);
+
+                // println!("Brain before: {}", )
+                brain.update_input(
+                    NeuronType::NearestCraberAngle,
+                    vision.nearest_craber_direction
+                );
+                brain.update_input(
+                    NeuronType::NearestCraberDistance,
+                     vision.nearest_craber_distance
+                );
+                vision.no_see_craber();
+            } else {
+                // decay vision
+
+                // brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
+            }
         brain.feed_forward();
         // brain.print_brain();
     }
 }
 
-pub fn craber_lose_energy(mut lose_energy_events: EventReader<LoseEnergyEvent>, mut query: Query<&mut Craber>)
+pub fn craber_lose_energy(mut lose_energy_events: EventReader<LoseEnergyEvent>, mut query: Query<&mut Energy>)
 {
     for lose_energy_event in lose_energy_events.read() {
-        query.get_mut(lose_energy_event.entity).unwrap().energy -= lose_energy_event.energy_lost;
+        if let Ok(mut energy) = query.get_mut(lose_energy_event.entity) {
+            energy.energy -= lose_energy_event.energy_lost;
+        }
     }
 }
 
-pub fn vision_inherit_craber_transform(
-    query: Query<(&Craber, &LinearVelocity, &AngularVelocity, &Children), Without<Vision>>,
-    mut vision_query: Query<(&mut LinearVelocity, &mut AngularVelocity), With<Vision>>,
-    time: Res<Time>,
-    mut timer: ResMut<SyncVisionPositionTimer>,
-) {
-    for (craber, linear_velocity, angular_velocity, children) in query.iter() {
-        let (mut vision_linear_velocity, mut vision_angular_velocity) = vision_query.get_mut(children[0]).unwrap();
-            // vision_transform.clone_from(transform);
-            vision_linear_velocity.x = linear_velocity.x;
-            vision_linear_velocity.y = linear_velocity.y;
-            vision_angular_velocity.0 = angular_velocity.0;
+pub fn craber_lose_health(mut lose_health_events: EventReader<LoseHealthEvent>, mut query: Query<&mut Health>)
+{
+    for lose_health_event in lose_health_events.read() {
+        if let Ok(mut health) = query.get_mut(lose_health_event.entity) {
+            health.health -= lose_health_event.health_lost;
+        }
     }
 }
+
+

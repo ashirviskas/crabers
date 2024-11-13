@@ -26,6 +26,8 @@ pub enum NeuronType {
     Rotate, // WIP
     ModifyBrainInterval, // TODO
     WantToMate,
+    WantToAttack,
+    WantToDefend,
 }
 
 impl NeuronType {
@@ -146,6 +148,16 @@ impl Brain {
                 neuron_type: NeuronType::NearestFoodDistance,
                 activation_function: ActivationFunction::None,
                 value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::NearestCraberAngle,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::NearestCraberDistance,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
             }
 
         ];
@@ -160,6 +172,11 @@ impl Brain {
                 activation_function: ActivationFunction::None,
                 value: 0.0,
             },
+            Neuron {
+                neuron_type: NeuronType::WantToAttack,
+                activation_function: ActivationFunction::None,
+                value: 0.0
+            }
         ];
         let hidden_layers = vec![Neuron {
             neuron_type: NeuronType::Hidden,
@@ -175,9 +192,17 @@ impl Brain {
                 bias: 0.0,
                 enabled: true,
             },
-            // Angle to hidden
+            // Food angle to hidden
             Connection {
                 from_id: 1,
+                to_id: 100,
+                weight: 1.0,
+                bias: 0.0,
+                enabled: true,
+            },
+            // Craber angle to hidden
+            Connection {
+                from_id: 3,
                 to_id: 100,
                 weight: 1.0,
                 bias: 0.0,
@@ -188,6 +213,14 @@ impl Brain {
                 from_id: 100,
                 to_id: 201,
                 weight: 4.5, // To make it rotate harder
+                bias: 0.0,
+                enabled: true,
+            },
+            // Always on to want to attack TODO: Remove after testing
+            Connection {
+                from_id: 0,
+                to_id: 202,
+                weight: 0.5,
                 bias: 0.0,
                 enabled: true,
             },
@@ -266,6 +299,25 @@ impl Brain {
             }
         }
         acceleration
+    }
+    pub fn get_want_to_attack(&self) -> f32 {
+        let mut want_to_attack = 0.0;
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::WantToAttack {
+                want_to_attack = neuron.value;
+            }
+        }
+        want_to_attack
+    }
+
+    pub fn get_want_to_defent(&self) -> f32 {
+        let mut want_to_defend = 0.0;
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::WantToDefend {
+                want_to_defend = neuron.value;
+            }
+        }
+        want_to_defend
     }
 
     pub fn feed_forward(&mut self) {
@@ -528,7 +580,10 @@ pub struct Vision {
     pub radius: f32,
     pub nearest_food_direction: f32,
     pub nearest_food_distance: f32,
+    pub nearest_craber_direction: f32,
+    pub nearest_craber_distance: f32,
     pub see_food: bool,
+    pub see_craber: bool,
     pub entities_in_vision: Vec<Entity>,
 }
 
@@ -537,6 +592,12 @@ impl Vision {
         self.see_food = false;
         self.nearest_food_distance = std::f32::MAX;
         self.nearest_food_direction = 0.;
+        self.entities_in_vision = Vec::new();
+    }
+    pub fn no_see_craber(&mut self) {
+        self.see_craber = false;
+        self.nearest_craber_distance = std::f32::MAX;
+        self.nearest_craber_direction = 0.;
         self.entities_in_vision = Vec::new();
     }
 }
