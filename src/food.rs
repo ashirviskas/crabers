@@ -39,6 +39,9 @@ pub fn spawn_food(
     mut food_spawn_event: EventReader<FoodSpawnEvent>,
 ) {
     for event in food_spawn_event.read() {
+        if event.food_energy < 0. {
+            continue;
+        }
         commands
             .spawn(SpriteBundle {
                 sprite: Sprite {

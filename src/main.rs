@@ -89,11 +89,9 @@ fn main() {
         .add_systems(Update, update_debug_info)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
-        .add_systems(Update, energy_consumption)
         .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, do_collision)
         .add_systems(Update, do_craber_collision)
-        .add_systems(Update, craber_reproduce)
         // .add_systems(Update, update_craber_color)
         // .add_systems(Update, print_current_entity_count)
 
@@ -107,6 +105,8 @@ fn main() {
         .add_systems(Update, craber_attack_lose_health_add_energy)
         .add_systems(Update, do_despawning)
         .add_systems(Update, craber_despawner)
+        .add_systems(Update, energy_consumption)
+        .add_systems(Update, craber_reproduce)
         .add_systems(Update, spawn_food)
 
 

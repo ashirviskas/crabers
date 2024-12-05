@@ -171,7 +171,8 @@ pub fn craber_despawner(
     for event in craber_despawn_events.read() {
         if let Ok((craber_entity, craber_health, craber_energy, craber_transform)) = query.get(event.entity) {
             commands.entity(craber_entity).despawn_recursive();
-            let new_food_energy = craber_health.health * CRABER_DEATH_ENERGY_FACTOR + craber_energy.energy * CRABER_DEATH_ENERGY_FACTOR;
+            // let new_food_energy = craber_health.health * CRABER_DEATH_ENERGY_FACTOR + craber_energy.energy * CRABER_DEATH_ENERGY_FACTOR;
+            let new_food_energy = craber_energy.energy * CRABER_DEATH_ENERGY_FACTOR;
             food_spawn_events.send(FoodSpawnEvent{transform: craber_transform.clone(), food_energy: new_food_energy});
         }
     }
