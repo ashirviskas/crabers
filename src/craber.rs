@@ -7,16 +7,19 @@ use rand::Rng;
 use crate::common::*;
 
 use crate::brain::*;
+use crate::food;
 
 const ENERGY_CONSUMPTION_RATE: f32 = 0.15;
 const CRABER_HEALING_RATE: f32 = 0.05;
+const CRABER_HEALING_COST: f32 = 1.3;
+const CRABER_DEATH_ENERGY_FACTOR: f32 = 0.7;
 const CRABER_MASS: f32 = 0.5;
 const CRABER_INERTIA: f32 = 0.05;
 const CRABER_ANGULAR_DAMPING: f32 = 0.9;
 pub const SPEED_FACTOR: f32 = 100.0;
 pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
-pub const CRABER_REPRODUCE_ENERGY: f32 = 40.0;
+pub const CRABER_REPRODUCE_ENERGY: f32 = 60.0;
 pub const MAX_CRABERS: usize = 5000;
 pub const MAX_CRABERS_SPAWNER: usize = 10;
 pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
@@ -121,9 +124,16 @@ pub struct LoseHealthEvent {
     pub health_lost: f32,
 }
 
+#[derive(Event)]
+pub struct CraberAttackEvent {
+    pub attacking_craber_entity: Entity,
+    pub attacked_craber_entity: Entity,
+    pub attack_damage: f32,
+    pub energy_to_gain: f32,
+}
 
-#[derive(Resource)]
-pub struct CraberSpawnTimer(pub Timer);
+
+
 
 #[derive(Resource)]
 pub struct RaversTimer(pub Timer);
@@ -134,18 +144,40 @@ pub fn energy_to_color(energy: f32, max_energy: f32) -> Color {
 }
 
 pub fn update_craber_color(mut query: Query<(&Craber, &mut Sprite, &mut Energy)>) {
-    for (craber, mut sprite, mut energy) in query.iter_mut() {
+    for (_, mut sprite, energy) in query.iter_mut() {
         sprite.color = energy_to_color(energy.energy, energy.max_energy);
     }
 }
 
-pub fn despawn_dead_crabers(mut commands: Commands, query: Query<(Entity, &Health)>) {
+pub fn despawn_dead_crabers(
+    // mut commands: Commands, 
+    query: Query<(Entity, &Health)>,
+    mut craber_despawn_events: EventWriter<CraberDespawnEvent>,
+) {
     for (entity, craber) in query.iter() {
         if craber.health <= 0.0 {
-            commands.entity(entity).despawn_recursive();
+            // commands.entity(entity).despawn_recursive();
+            craber_despawn_events.send(CraberDespawnEvent{entity});
         }
     }
 }
+
+pub fn craber_despawner(
+    mut commands: Commands, 
+    query: Query<(Entity, &Health, &Energy, &Transform)>,
+    mut craber_despawn_events: EventReader<CraberDespawnEvent>,
+    mut food_spawn_events: EventWriter<FoodSpawnEvent>,
+) {
+    for event in craber_despawn_events.read() {
+        if let Ok((craber_entity, craber_health, craber_energy, craber_transform)) = query.get(event.entity) {
+            commands.entity(craber_entity).despawn_recursive();
+            let new_food_energy = craber_health.health * CRABER_DEATH_ENERGY_FACTOR + craber_energy.energy * CRABER_DEATH_ENERGY_FACTOR;
+            food_spawn_events.send(FoodSpawnEvent{transform: craber_transform.clone(), food_energy: new_food_energy});
+        }
+    }
+}
+
+
 
 pub fn spawn_craber(
     mut commands: Commands,
@@ -246,7 +278,7 @@ pub fn spawn_craber(
                 ),
                 transform: Transform {
                     translation: Vec3::new(0., 0., 0.1),
-                    rotation: rotation,
+                    // rotation: rotation,
                     ..Default::default()
                 },
                 ..Default::default()
@@ -306,9 +338,11 @@ pub fn energy_consumption(
     mut reproduce_events: EventWriter<ReproduceEvent>,
 ) {
     for (entity, mut health, mut energy, _velocity, generation, brain) in query.iter_mut() {
-        energy.energy -= ENERGY_CONSUMPTION_RATE * time.delta_seconds();
+        let delta_seconds = time.delta_seconds();
+        energy.energy -= ENERGY_CONSUMPTION_RATE * delta_seconds;
         if health.health < 100.0 {
-            health.health += CRABER_HEALING_RATE; 
+            health.health += CRABER_HEALING_RATE * delta_seconds;
+            energy.energy -= CRABER_HEALING_COST * delta_seconds;
         } // TODO: FIX
         if energy.energy >= CRABER_REQUIRED_REPRODUCE_ENERGY {
             let new_generation = Generation{generation_id: generation.generation_id + 1};

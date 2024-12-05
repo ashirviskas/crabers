@@ -2,6 +2,10 @@ use bevy::prelude::*;
 use rand::Rng;
 use rand::seq::SliceRandom;
 
+
+const CRABER_MAX_WANT_TO_ATTACK: f32 = 10.;
+
+
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NeuronType {
     // Input
@@ -305,6 +309,9 @@ impl Brain {
         for neuron in self.outputs.iter() {
             if neuron.neuron_type == NeuronType::WantToAttack {
                 want_to_attack = neuron.value;
+                if want_to_attack > CRABER_MAX_WANT_TO_ATTACK {
+                    want_to_attack = CRABER_MAX_WANT_TO_ATTACK;
+                }
             }
         }
         want_to_attack

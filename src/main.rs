@@ -78,6 +78,9 @@ fn main() {
         .add_event::<LoseEnergyEvent>()
         .add_event::<LoseHealthEvent>()
         .add_event::<CraberCollisionEvent>()
+        .add_event::<CraberAttackEvent>()
+        .add_event::<CraberDespawnEvent>()
+        .add_event::<FoodSpawnEvent>()
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
         .add_systems(Update, entity_selection)
@@ -101,7 +104,10 @@ fn main() {
         .add_systems(Update, brain_update)
         .add_systems(Update, craber_lose_energy)
         .add_systems(Update, craber_lose_health)
+        .add_systems(Update, craber_attack_lose_health_add_energy)
         .add_systems(Update, do_despawning)
+        .add_systems(Update, craber_despawner)
+        .add_systems(Update, spawn_food)
 
 
 
@@ -474,28 +480,45 @@ fn do_collision(
 
 pub fn do_craber_collision(
     mut craber_collision_events: EventReader<CraberCollisionEvent>,
-    query: Query<(Entity, &Brain)>,
-    mut lose_energy_events: EventWriter<LoseEnergyEvent>,
-    mut lose_health_events: EventWriter<LoseHealthEvent>
+    query: Query<(
+        Entity, 
+        &Brain,
+        &LinearVelocity,
+        &AngularVelocity
+    )>,
+    // mut lose_energy_events: EventWriter<LoseEnergyEvent>,
+    // mut lose_health_events: EventWriter<LoseHealthEvent>
+    mut craber_attack_events: EventWriter<CraberAttackEvent>
+
 
 ) {
     for craber_collision_event in craber_collision_events.read() {
-        if let Ok((entity_a, brain_a)) = query.get(craber_collision_event.entity_a) {
-            if let Ok((entity_b, brain_b)) = query.get(craber_collision_event.entity_b) {
+        if let Ok((entity_a, brain_a, velocity_a, angular_a)) = query.get(craber_collision_event.entity_a) {
+            if let Ok((entity_b, brain_b, velocity_b, angular_b)) = query.get(craber_collision_event.entity_b) {
                 if brain_a.get_want_to_attack() > 0. || brain_b.get_want_to_attack() > 0. {
-                    let mut energy_lost_a = brain_b.get_want_to_attack() * 5.;
-                    let mut energy_lost_b = brain_a.get_want_to_attack() * 5.;
-                    if energy_lost_a < 0. {
-                        energy_lost_a = 0.;
+                    let a_damaged = brain_b.get_want_to_attack() * 5. * velocity_b.length() - angular_b.0.abs(); // Velocity increases attack, spinning decreases
+                    let b_damaged = brain_a.get_want_to_attack() * 5. * velocity_a.length() - angular_a.0.abs();
+                    if a_damaged > 0. {
+                        craber_attack_events.send(CraberAttackEvent{
+                            attacking_craber_entity: entity_b,
+                            attacked_craber_entity: entity_a,
+                            attack_damage: a_damaged,
+                            energy_to_gain: a_damaged * 0.3
+                        });
                     }
-                    if energy_lost_b < 0. {
-                        energy_lost_b = 0.;
+                    if b_damaged > 0. {
+                        craber_attack_events.send(CraberAttackEvent{
+                            attacking_craber_entity: entity_a,
+                            attacked_craber_entity: entity_b,
+                            attack_damage: b_damaged,
+                            energy_to_gain: b_damaged * 0.3
+                        });
                     }
-                    lose_health_events.send(LoseHealthEvent{entity: entity_a, health_lost: energy_lost_a});
-                    lose_health_events.send(LoseHealthEvent{entity: entity_b, health_lost: energy_lost_b});
-                    // // hack to actually get energy
-                    lose_energy_events.send(LoseEnergyEvent{entity: entity_a, energy_lost: -energy_lost_b});
-                    lose_energy_events.send(LoseEnergyEvent{entity: entity_b, energy_lost: -energy_lost_a});
+                    // lose_health_events.send(LoseHealthEvent{entity: entity_a, health_lost: energy_lost_a});
+                    // lose_health_events.send(LoseHealthEvent{entity: entity_b, health_lost: energy_lost_b});
+                    // // // hack to actually get energy
+                    // lose_energy_events.send(LoseEnergyEvent{entity: entity_a, energy_lost: -energy_lost_b});
+                    // lose_energy_events.send(LoseEnergyEvent{entity: entity_b, energy_lost: -energy_lost_a});
 
                 }
         }
@@ -562,6 +585,9 @@ fn apply_acceleration(
         let mut brain_forward_acceleration = brain.get_forward_acceleration();
         if brain_forward_acceleration > 10. {
             brain_forward_acceleration = 9.99;
+        }
+        if brain_forward_acceleration < -10. {
+            brain_forward_acceleration = -9.99;
         }
         let new_velocity = force_2d * brain_forward_acceleration;
         linear_velocity.0 = new_velocity;
@@ -755,5 +781,35 @@ pub fn craber_lose_health(mut lose_health_events: EventReader<LoseHealthEvent>, 
         }
     }
 }
+
+pub fn craber_attack_lose_health_add_energy(
+    mut craber_attack_events: EventReader<CraberAttackEvent>, 
+    mut attacked_query: Query<&mut Health>,
+    mut attacker_query: Query<&mut Energy>,
+)
+{
+    for craber_attack_event in craber_attack_events.read() {
+        if let Ok(mut health) = attacked_query.get_mut(craber_attack_event.attacked_craber_entity) {
+            // TODO use match
+            if health.health < 0. {
+                continue;
+            }
+            if health.health - craber_attack_event.attack_damage < 0. {
+                let total_attack_damage = craber_attack_event.attack_damage - health.health;
+                let energy_modifier = total_attack_damage / craber_attack_event.attack_damage;
+                if let Ok(mut energy) = attacker_query.get_mut(craber_attack_event.attacking_craber_entity) {
+                    energy.energy += craber_attack_event.energy_to_gain * energy_modifier;
+                }
+                health.health -= total_attack_damage;
+                continue;
+            }
+            if let Ok(mut energy) = attacker_query.get_mut(craber_attack_event.attacking_craber_entity) {
+                health.health -= craber_attack_event.attack_damage;
+                energy.energy += craber_attack_event.energy_to_gain;
+            }
+        }   
+    }
+}
+
 
 

@@ -65,7 +65,7 @@ Building a WASM build:
   - [ ] Inputs:
     - [ ] Speed
     - [x] Angle to nearest food
-    - [ ] Angle to nearest organism
+    - [x] Angle to nearest organism
     - [ ] Genetic closeness
     - [ ] Current energy level
     - [ ] Health
@@ -83,7 +83,7 @@ Building a WASM build:
   - [x] Brain mutations
   - [ ] Other craber qualities mutations
 - [ ] Damage system
-  - [ ] Bite/Attack
+  - [x] Bite/Attack
   - [ ] Defend
 - [ ] Drop food when die
 - [ ] More complex brain

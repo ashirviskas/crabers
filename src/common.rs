@@ -25,6 +25,24 @@ pub struct DespawnEvent {
     pub entity: Entity,
 }
 
+#[derive(Event)]
+pub struct FoodSpawnEvent {
+    pub transform: Transform,
+    pub food_energy: f32,
+}
+
+#[derive(Event)]
+pub struct CraberDespawnEvent {
+    pub entity: Entity,
+}
+
+#[derive(Resource)]
+pub struct CraberSpawnTimer(pub Timer);
+
+// Vision update timer
+#[derive(Resource)]
+pub struct FoodSpawnTimer(pub Timer);
+
 #[derive(Component)]
 pub enum SelectableEntity {
     Craber,
