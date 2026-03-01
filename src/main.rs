@@ -15,6 +15,9 @@ use brain::*;
 mod food;
 use food::*;
 
+mod neural_viz;
+use neural_viz::*;
+
 mod common;
 use bevy_pancam::{PanCam, PanCamPlugin};
 use common::{
@@ -71,6 +74,7 @@ fn main() {
         // .add_plugins(WorldInspectorPlugin::default())
         .insert_resource(SelectedEntity::default())
         .insert_resource(DebugInfo::default())
+        .insert_resource(NeuralNetworkLayout::default())
         .add_event::<DespawnEvent>()
         .add_event::<SpawnEvent>()
         .add_event::<ReproduceEvent>()
@@ -83,9 +87,13 @@ fn main() {
         .add_event::<FoodSpawnEvent>()
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
+        .add_systems(Startup, setup_neural_panel)
         .add_systems(Update, entity_selection)
         .add_systems(Update, update_selected_entity_info)
         .add_systems(Update, update_ui)
+        .add_systems(Update, update_nn_layout)
+        .add_systems(Update, spawn_neuron_nodes)
+        .add_systems(Update, update_neuron_display)
         .add_systems(Update, update_debug_info)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
@@ -231,6 +239,10 @@ fn setup(mut commands: Commands) {
         .insert(Collider::rectangle(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
 
+/// Marker component for the main status/debug text UI
+#[derive(Component)]
+struct StatusText;
+
 fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
     commands.spawn(TextBundle {
         text: Text::from_sections([
@@ -253,15 +265,16 @@ fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
         ]),
         // ... other properties ...
         ..Default::default()
-    });
+    })
+    .insert(StatusText);
 }
 
-fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
+fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text, With<StatusText>>) {
     for mut text in query.iter_mut() {
         if let Some(_) = selected.entity {
             text.sections[0].value = format!(
-                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}\nBrain: {}",
-                selected.health, selected.energy, selected.generation, selected.nearest_food_anlge, selected.brain_info
+                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}",
+                selected.health, selected.energy, selected.generation, selected.nearest_food_anlge
             );
         } else {
             text.sections[0].value = "No craber selected".to_string();
@@ -275,7 +288,7 @@ fn update_debug_info(
     food_query: Query<&Food>,
     diagnostics: Res<DiagnosticsStore>,
     _time: Res<Time>,
-    mut query: Query<&mut Text>,
+    mut query: Query<&mut Text, With<StatusText>>,
 ) {
     debug_info.entity_count = craber_query.iter().count() + food_query.iter().count();
     let fps = diagnostics
