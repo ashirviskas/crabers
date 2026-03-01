@@ -51,6 +51,10 @@ impl CraberTexture {
 pub struct Craber {
 }
 
+/// Marker component to prevent double-despawn of dead crabers
+#[derive(Component)]
+pub struct Dying;
+
 #[derive(Component)]
 pub struct Generation{
     pub generation_id: u32,
@@ -66,6 +70,19 @@ pub struct Health{
 pub struct Energy{
     pub max_energy: f32,
     pub energy: f32,
+}
+
+#[derive(Component, Debug)]
+pub struct ReproduceCooldown {
+    pub timer: Timer,
+}
+
+impl Default for ReproduceCooldown {
+    fn default() -> Self {
+        Self {
+            timer: Timer::from_seconds(1.0, TimerMode::Once),
+        }
+    }
 }
 
 
@@ -150,13 +167,13 @@ pub fn update_craber_color(mut query: Query<(&Craber, &mut Sprite, &mut Energy)>
 }
 
 pub fn despawn_dead_crabers(
-    // mut commands: Commands, 
-    query: Query<(Entity, &Health)>,
+    mut commands: Commands,
+    query: Query<(Entity, &Health), Without<Dying>>,
     mut craber_despawn_events: EventWriter<CraberDespawnEvent>,
 ) {
     for (entity, craber) in query.iter() {
         if craber.health <= 0.0 {
-            // commands.entity(entity).despawn_recursive();
+            commands.entity(entity).insert(Dying);
             craber_despawn_events.send(CraberDespawnEvent{entity});
         }
     }
@@ -252,6 +269,7 @@ pub fn spawn_craber(
             .insert(Friction::new(0.3))
             .insert(event.new_brain.clone())
             .insert(EntityType::Craber)
+            .insert(ReproduceCooldown::default())
             .id();
         let vision = Vision {
             radius: 100.0,
@@ -334,56 +352,55 @@ pub fn craber_spawner(
 
 // Make crabers lose energy over time
 pub fn energy_consumption(
-    mut query: Query<(Entity, &mut Health, &mut Energy, &mut LinearVelocity, &Generation, &Brain)>,
+    mut query: Query<(Entity, &mut Health, &mut Energy, &mut LinearVelocity, &Generation, &Brain, &mut ReproduceCooldown)>,
     time: Res<Time>,
     mut reproduce_events: EventWriter<ReproduceEvent>,
 ) {
-    for (entity, mut health, mut energy, _velocity, generation, brain) in query.iter_mut() {
+    for (entity, mut health, mut energy, _velocity, generation, brain, mut cooldown) in query.iter_mut() {
         let delta_seconds = time.delta_seconds();
         energy.energy -= ENERGY_CONSUMPTION_RATE * delta_seconds;
         if health.health < 100.0 {
             health.health += CRABER_HEALING_RATE * delta_seconds;
             energy.energy -= CRABER_HEALING_COST * delta_seconds;
-        } // TODO: FIX
-        if energy.energy >= CRABER_REQUIRED_REPRODUCE_ENERGY {
+        }
+        // Tick the reproduction cooldown
+        cooldown.timer.tick(time.delta());
+        if energy.energy >= CRABER_REQUIRED_REPRODUCE_ENERGY && cooldown.timer.finished() {
             let new_generation = Generation{generation_id: generation.generation_id + 1};
             reproduce_events.send(ReproduceEvent { entity, generation: new_generation});
+            cooldown.timer.reset();
         }
         // Handle low energy situations
         if energy.energy <= 0.0 {
-            // velocity.0 = Vec2::ZERO; // Stop movement
-            health.health -= 1.0; // Reduce health if needed
+            health.health -= 60.0 * delta_seconds;
         }
     }
 }
 
 // TODO: Make reproduction for plants/food? Would need a separate health/energy component
 pub fn craber_reproduce(
-    mut craber_query: Query<(&Transform, &Brain)>,
+    mut craber_query: Query<(&Transform, &Brain, &mut Energy)>,
     mut reproduce_events: EventReader<ReproduceEvent>,
     mut spawn_events: EventWriter<SpawnEvent>,
-    mut lose_energy_events: EventWriter<LoseEnergyEvent>,
 ) {
     for event in reproduce_events.read() {
-        if let Ok((transform, brain)) = craber_query.get_mut(event.entity) {
-            // let velocity: Velocity = Velocity::linear(Vec2::new(0., 0.) * SPEED_FACTOR);
+        if let Ok((transform, brain, mut energy)) = craber_query.get_mut(event.entity) {
+            // Guard: ensure parent still has enough energy (may have been spent since event was sent)
+            if energy.energy < CRABER_REPRODUCE_ENERGY {
+                continue;
+            }
+            // Deduct energy directly to prevent multi-frame burst
+            energy.energy -= CRABER_REPRODUCE_ENERGY;
 
             // Position offset from parent to the back, first find the angle of the parent
             let parent_angle = transform.rotation.to_axis_angle().1;
             let position_offset = Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 5.0;
             let position = transform.translation + position_offset.extend(0.0);
-            // println!("Parent position: {:?}", craber.1.translation);
-            // energy.energy -= CRABER_REPRODUCE_ENERGY;
-            lose_energy_events.send(LoseEnergyEvent{
-                entity: event.entity,
-                energy_lost: CRABER_REPRODUCE_ENERGY
-            });
 
             // Rotation 180 degrees from parent
             let rotation = Quat::from_rotation_z(parent_angle + std::f32::consts::PI);
             spawn_events.send(SpawnEvent {
                 position,
-                // velocity,
                 new_brain: brain.new_mutated_brain(CRABER_MUTATION_CHANCE, CRABER_MUTATION_AMOUNT, CRABER_MUTATION_CHANCE, CRABER_MUTATION_CHANCE),
                 generation: event.generation.generation_id,
                 roation: rotation,

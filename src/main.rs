@@ -30,7 +30,7 @@ const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.0004;
 const CRABER_SPAWN_RATE: f32 = 0.1;
 
-const MAX_FOOD_COUNT: usize = 10000;
+pub const MAX_FOOD_COUNT: usize = 10000;
 
 const WALL_THICKNESS: f32 = 60.0;
 // const QUAD_TREE_CAPACITY: usize = 16;
@@ -97,14 +97,12 @@ fn main() {
         .add_systems(Update, update_debug_info)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
-        .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, do_collision)
         .add_systems(Update, do_craber_collision)
         // .add_systems(Update, update_craber_color)
         // .add_systems(Update, print_current_entity_count)
 
         // .add_systems(Update, do_decollisions)
-        .add_systems(Update, spawn_craber)
         .add_systems(Update, vision_update)
         .add_systems(Update, apply_acceleration)
         .add_systems(Update, brain_update)
@@ -112,9 +110,12 @@ fn main() {
         .add_systems(Update, craber_lose_health)
         .add_systems(Update, craber_attack_lose_health_add_energy)
         .add_systems(Update, do_despawning)
+        // Ordered chains: reproduction pipeline and death pipeline
+        .add_systems(Update, energy_consumption.before(craber_reproduce))
+        .add_systems(Update, craber_reproduce.before(spawn_craber))
+        .add_systems(Update, spawn_craber)
+        .add_systems(Update, despawn_dead_crabers.before(craber_despawner))
         .add_systems(Update, craber_despawner)
-        .add_systems(Update, energy_consumption)
-        .add_systems(Update, craber_reproduce)
         .add_systems(Update, spawn_food)
 
 
@@ -803,24 +804,24 @@ pub fn craber_attack_lose_health_add_energy(
 {
     for craber_attack_event in craber_attack_events.read() {
         if let Ok(mut health) = attacked_query.get_mut(craber_attack_event.attacked_craber_entity) {
-            // TODO use match
-            if health.health < 0. {
+            if health.health <= 0. {
                 continue;
             }
             if health.health - craber_attack_event.attack_damage < 0. {
-                let total_attack_damage = craber_attack_event.attack_damage - health.health;
-                let energy_modifier = total_attack_damage / craber_attack_event.attack_damage;
+                // Overkill: only deal remaining health as actual damage, scale energy gain down
+                let actual_damage = health.health;
+                let energy_modifier = actual_damage / craber_attack_event.attack_damage;
                 if let Ok(mut energy) = attacker_query.get_mut(craber_attack_event.attacking_craber_entity) {
                     energy.energy += craber_attack_event.energy_to_gain * energy_modifier;
                 }
-                health.health -= total_attack_damage;
+                health.health = 0.0; // ensure death
                 continue;
             }
             if let Ok(mut energy) = attacker_query.get_mut(craber_attack_event.attacking_craber_entity) {
                 health.health -= craber_attack_event.attack_damage;
                 energy.energy += craber_attack_event.energy_to_gain;
             }
-        }   
+        }
     }
 }
 

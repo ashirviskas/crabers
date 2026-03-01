@@ -18,15 +18,18 @@ pub fn food_spawner(
     time: Res<Time>,
     mut timer: ResMut<FoodSpawnTimer>,
     mut food_spawn_event: EventWriter<FoodSpawnEvent>,
+    food_query: Query<&Food>,
 ) {
     if timer.0.tick(time.delta()).just_finished() {
+        if food_query.iter().count() >= crate::MAX_FOOD_COUNT {
+            return;
+        }
         let mut rng = rand::thread_rng();
         let position = Vec2::new(
             rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
             rng.gen_range((WORLD_SIZE * -1.)..WORLD_SIZE),
         );
         let energy_value = rng.gen_range(5.0..15.0);
-        // .insert(ActiveEvents::COLLISION_EVENTS);
         food_spawn_event.send(FoodSpawnEvent {
             transform: Transform::from_translation(position.extend(0.0)),
             food_energy: energy_value,
