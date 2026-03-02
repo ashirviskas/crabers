@@ -117,9 +117,9 @@ pub fn print_current_entity_count(
 }
 
 // Movement constants
-pub const MAX_IMPULSE: f32 = 6000.0;
+pub const MAX_IMPULSE: f32 = 60000.0;
 pub const KICK_THRESHOLD: f32 = 0.01;
-pub const TORQUE_SCALE: f32 = 2000.0;
+pub const TORQUE_SCALE: f32 = 3000.0;
 pub const LINEAR_DAMPING_VALUE: f32 = 2.0;
 pub const ALIGN_DAMPING_COEFF: f32 = 10.0;
 pub const KICK_ENERGY_MODIFIER: f32 = 0.1;

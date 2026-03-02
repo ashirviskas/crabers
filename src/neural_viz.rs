@@ -88,6 +88,107 @@ fn neuron_position(layer: NeuronLayer, index: usize) -> (f32, f32) {
     (COLUMN_X[col], ROW_START_Y + index as f32 * ROW_SPACING)
 }
 
+/// Classify a neuron ID into its layer
+fn id_to_layer(id: usize) -> NeuronLayer {
+    if id < 100 {
+        NeuronLayer::Input
+    } else if id < 200 {
+        NeuronLayer::Hidden
+    } else {
+        NeuronLayer::Output
+    }
+}
+
+/// Point on a quadratic bezier curve at parameter t
+fn quadratic_bezier(p0: (f32, f32), control: (f32, f32), p1: (f32, f32), t: f32) -> (f32, f32) {
+    let inv = 1.0 - t;
+    (
+        inv * inv * p0.0 + 2.0 * inv * t * control.0 + t * t * p1.0,
+        inv * inv * p0.1 + 2.0 * inv * t * control.1 + t * t * p1.1,
+    )
+}
+
+/// Spawn a single line segment between two points
+fn spawn_line_segment(parent: &mut ChildBuilder, from: (f32, f32), to: (f32, f32), color: Color) {
+    let dx = to.0 - from.0;
+    let dy = to.1 - from.1;
+    let length = (dx * dx + dy * dy).sqrt();
+    if length < 0.1 {
+        return;
+    }
+    let angle = dy.atan2(dx);
+
+    let mid_x = (from.0 + to.0) / 2.0;
+    let mid_y = (from.1 + to.1) / 2.0;
+    let left = mid_x - length / 2.0;
+    let top = mid_y - LINE_THICKNESS / 2.0;
+
+    parent
+        .spawn(NodeBundle {
+            style: Style {
+                position_type: PositionType::Absolute,
+                left: Val::Px(left),
+                top: Val::Px(top),
+                width: Val::Px(length),
+                height: Val::Px(LINE_THICKNESS),
+                ..default()
+            },
+            background_color: color.into(),
+            transform: Transform::from_rotation(Quat::from_rotation_z(angle)),
+            z_index: ZIndex::Local(-1),
+            ..default()
+        })
+        .insert(ConnectionLine);
+}
+
+/// Spawn a curved connection as ~10 line segments approximating a quadratic bezier
+fn spawn_curved_connection(
+    parent: &mut ChildBuilder,
+    from: (f32, f32),
+    to: (f32, f32),
+    weight: f32,
+    enabled: bool,
+    curve_offset: (f32, f32),
+) {
+    let from_c = (from.0 + NEURON_RADIUS, from.1 + NEURON_RADIUS);
+    let to_c = (to.0 + NEURON_RADIUS, to.1 + NEURON_RADIUS);
+    let control = (
+        (from_c.0 + to_c.0) / 2.0 + curve_offset.0,
+        (from_c.1 + to_c.1) / 2.0 + curve_offset.1,
+    );
+    let color = weight_to_color(weight, enabled);
+    let segments = 10;
+    for i in 0..segments {
+        let t0 = i as f32 / segments as f32;
+        let t1 = (i + 1) as f32 / segments as f32;
+        let p0 = quadratic_bezier(from_c, control, to_c, t0);
+        let p1 = quadratic_bezier(from_c, control, to_c, t1);
+        spawn_line_segment(parent, p0, p1, color);
+    }
+}
+
+/// Spawn a self-loop as a small arc to the right of a neuron
+fn spawn_self_loop(
+    parent: &mut ChildBuilder,
+    pos: (f32, f32),
+    weight: f32,
+    enabled: bool,
+) {
+    let cx = pos.0 + NEURON_RADIUS;
+    let cy = pos.1 + NEURON_RADIUS;
+    let loop_offset = 30.0 * UI_SCALE;
+    let color = weight_to_color(weight, enabled);
+    let segments = 10;
+    // Draw arc from right side of neuron, looping out to the right and back
+    for i in 0..segments {
+        let a0 = -std::f32::consts::PI * 0.7 + (i as f32 / segments as f32) * std::f32::consts::PI * 1.4;
+        let a1 = -std::f32::consts::PI * 0.7 + ((i + 1) as f32 / segments as f32) * std::f32::consts::PI * 1.4;
+        let p0 = (cx + loop_offset * a0.cos() + NEURON_RADIUS, cy + loop_offset * a0.sin());
+        let p1 = (cx + loop_offset * a1.cos() + NEURON_RADIUS, cy + loop_offset * a1.sin());
+        spawn_line_segment(parent, p0, p1, color);
+    }
+}
+
 /// Convert a weight value to a color (green for positive, red for negative)
 fn weight_to_color(weight: f32, enabled: bool) -> Color {
     if !enabled {
@@ -315,13 +416,45 @@ pub fn spawn_neuron_nodes(
             let to_pos = get_pos(connection.to_id);
 
             if let (Some(from), Some(to)) = (from_pos, to_pos) {
-                spawn_connection_line(
-                    container,
-                    from,
-                    to,
-                    connection.weight,
-                    connection.enabled,
-                );
+                let from_layer = id_to_layer(connection.from_id);
+                let to_layer = id_to_layer(connection.to_id);
+
+                match (from_layer, to_layer) {
+                    // Input→Output: curve above/below hidden column
+                    (NeuronLayer::Input, NeuronLayer::Output) => {
+                        let curve_y = -60.0 * UI_SCALE;
+                        spawn_curved_connection(
+                            container, from, to,
+                            connection.weight, connection.enabled,
+                            (0.0, curve_y),
+                        );
+                    }
+                    // Hidden→Hidden self-connection
+                    (NeuronLayer::Hidden, NeuronLayer::Hidden)
+                        if connection.from_id == connection.to_id =>
+                    {
+                        spawn_self_loop(
+                            container, from,
+                            connection.weight, connection.enabled,
+                        );
+                    }
+                    // Hidden→Hidden different neurons: curve bulging right
+                    (NeuronLayer::Hidden, NeuronLayer::Hidden) => {
+                        let curve_x = 60.0 * UI_SCALE;
+                        spawn_curved_connection(
+                            container, from, to,
+                            connection.weight, connection.enabled,
+                            (curve_x, 0.0),
+                        );
+                    }
+                    // Normal straight lines: Input→Hidden, Hidden→Output
+                    _ => {
+                        spawn_connection_line(
+                            container, from, to,
+                            connection.weight, connection.enabled,
+                        );
+                    }
+                }
             }
         }
 

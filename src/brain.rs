@@ -203,7 +203,7 @@ impl Brain {
             Connection {
                 from_id: 0,
                 to_id: 200,
-                weight: 0.5,
+                weight: 2.0,
                 bias: 0.0,
                 enabled: true,
             },
@@ -211,7 +211,7 @@ impl Brain {
             Connection {
                 from_id: 0,
                 to_id: 201,
-                weight: 0.2,
+                weight: 0.01,
                 bias: 0.0,
                 enabled: true,
             },
@@ -370,49 +370,48 @@ impl Brain {
     }
 
     pub fn feed_forward(&mut self) {
-        // Reset outputs and hidden
-        for output_id in 0..self.outputs.len() {
-            self.outputs[output_id].value = 0.0;
+        // Snapshot all neuron values into prev (double-buffer)
+        let max_id = 200 + self.outputs.len();
+        let mut prev = vec![0.0f32; max_id];
+        for (i, n) in self.inputs.iter().enumerate() {
+            prev[i] = n.value;
         }
-        for hidden_id in 0..self.hidden_layers.len() {
-            self.hidden_layers[hidden_id].value = 0.0;
+        for (i, n) in self.hidden_layers.iter().enumerate() {
+            prev[100 + i] = n.value;
         }
-        // Input to hidden
-        for connection_id in 0..self.connections.len() {
-            let connection = &self.connections[connection_id];
-            if !connection.enabled {
-                continue;
+        for (i, n) in self.outputs.iter().enumerate() {
+            prev[200 + i] = n.value;
+        }
+
+        // Pull-compute hidden neurons
+        for h_idx in 0..self.hidden_layers.len() {
+            let h_id = 100 + h_idx;
+            let mut sum = 0.0f32;
+            for conn in &self.connections {
+                if !conn.enabled || conn.to_id != h_id {
+                    continue;
+                }
+                if conn.from_id < prev.len() {
+                    sum += prev[conn.from_id] * conn.weight + conn.bias;
+                }
             }
-            if connection.from_id >= 100 {
-                continue;
-            }
-            let from_neuron = self.get_neuron(connection.from_id).unwrap();
-            let to_neuron = self.get_neuron(connection.to_id).unwrap().clone();
-            let new_value =
-                to_neuron.value + from_neuron.value * connection.weight + connection.bias;
-            self.set_neuron_value(connection.to_id, new_value);
+            self.hidden_layers[h_idx].value =
+                self.hidden_layers[h_idx].activation_function.calculate(sum);
         }
-        // Hidden functions
-        for neuron in self.hidden_layers.iter_mut() {
-            neuron.value = neuron.activation_function.calculate(neuron.value);
-        }
-        // Hidden to output
-        for connection_id in 0..self.connections.len() {
-            let connection = &self.connections[connection_id];
-            if !connection.enabled {
-                continue;
+
+        // Pull-compute output neurons
+        for o_idx in 0..self.outputs.len() {
+            let o_id = 200 + o_idx;
+            let mut sum = 0.0f32;
+            for conn in &self.connections {
+                if !conn.enabled || conn.to_id != o_id {
+                    continue;
+                }
+                if conn.from_id < prev.len() {
+                    sum += prev[conn.from_id] * conn.weight + conn.bias;
+                }
             }
-            if connection.from_id < 100 || connection.from_id >= 200 {
-                continue;
-            }
-            let from_neuron = self.get_neuron(connection.from_id).unwrap();
-            let to_neuron = self.get_neuron(connection.to_id).unwrap().clone();
-            let new_value =
-                to_neuron.value + from_neuron.value * connection.weight + connection.bias;
-            self.set_neuron_value(connection.to_id, new_value);
-        }
-        for neuron in self.outputs.iter_mut() {
-            neuron.value = neuron.activation_function.calculate(neuron.value);
+            self.outputs[o_idx].value = self.outputs[o_idx].activation_function.calculate(sum);
         }
     }
 
@@ -553,7 +552,7 @@ impl Brain {
                 bias: 0.0,      // Initial placeholder value
                 enabled: false, // Initial placeholder value
             };
-            match rng.gen_range(0..2) {
+            match rng.gen_range(0..3) {
                 0 => {
                     let to_a = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
                     let to_b = rng.gen_range(0..mutated_brain.outputs.len()) + 200;
@@ -578,11 +577,23 @@ impl Brain {
                         }
                     }
                 }
-                1 | _ => {
+                1 => {
                     let to_b = rng.gen_range(0..self.outputs.len()) + 200;
                     new_connection = Connection {
                         from_id: from_b,
                         to_id: to_b,
+                        weight: rng.gen_range(-1.0..1.0),
+                        bias: rng.gen_range(-1.0..1.0),
+                        enabled: true,
+                    };
+                }
+                2 | _ => {
+                    // Hidden→hidden connection (allows self-connections)
+                    let from_h = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    let to_h = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    new_connection = Connection {
+                        from_id: from_h,
+                        to_id: to_h,
                         weight: rng.gen_range(-1.0..1.0),
                         bias: rng.gen_range(-1.0..1.0),
                         enabled: true,
@@ -639,6 +650,8 @@ pub struct Vision {
     pub see_food: bool,
     pub see_craber: bool,
     pub entities_in_vision: Vec<Entity>,
+    pub food_seen_timer: f32,
+    pub craber_seen_timer: f32,
 }
 
 impl Vision {
