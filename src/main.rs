@@ -597,7 +597,7 @@ fn apply_kick(
     let dt = time.delta_seconds();
     for (entity, mut external_impulse, mut accumulator, transform, brain) in query.iter_mut() {
         let kick_rate = brain.get_kick_rate().clamp(0.0, 1.0);
-        let kick_strength = brain.get_kick_strength().clamp(0.0, 1.0);
+        let kick_strength = brain.get_kick_strength().max(0.0);
 
         accumulator.0 += kick_rate * dt;
         if accumulator.0 < KICK_THRESHOLD {
@@ -605,11 +605,13 @@ fn apply_kick(
         }
         accumulator.0 = 0.0;
 
+        let effective_strength = 1.0 - (-kick_strength * KICK_STEEPNESS).exp();
+
         let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
-        let thrust = facing_dir * kick_strength * MAX_IMPULSE;
+        let thrust = facing_dir * effective_strength * MAX_IMPULSE;
         external_impulse.apply_impulse(thrust);
 
-        let energy_cost = kick_strength.powf(1.2) * KICK_ENERGY_MODIFIER;
+        let energy_cost = effective_strength.powf(1.2) * KICK_ENERGY_MODIFIER;
         lose_energy_events.send(LoseEnergyEvent {
             entity,
             energy_lost: energy_cost,
