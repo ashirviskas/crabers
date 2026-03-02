@@ -26,7 +26,9 @@ pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
 pub const CRABER_MUTATION_CHANCE: f32 = 0.05;
 pub const CRABER_MUTATION_AMOUNT: f32 = 0.5;
 
-pub const CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER: f32 = 0.1;
+/// Accumulator for discrete kick impulses. Each critter has its own.
+#[derive(Component)]
+pub struct KickAccumulator(pub f32);
 pub enum CraberTexture {
     A,
     B,
@@ -86,8 +88,6 @@ impl Default for ReproduceCooldown {
 }
 
 
-#[derive(Component)]
-pub struct Acceleration(pub Vec2);
 
 #[derive(Event)]
 pub struct ReproduceEvent {
@@ -237,6 +237,8 @@ pub fn spawn_craber(
             .insert(Inertia(CRABER_INERTIA))
             .insert(Restitution::new(0.8))
             .insert(AngularDamping(CRABER_ANGULAR_DAMPING))
+            .insert(LinearDamping(crate::common::LINEAR_DAMPING_VALUE))
+            .insert(KickAccumulator(0.0))
             .insert(Name::new("Craber"))
             .insert(SpriteBundle {
                 sprite: Sprite {
@@ -258,7 +260,6 @@ pub fn spawn_craber(
             .insert(SelectableEntity::Craber)
             // .insert(velocity)
             .insert(Weight { weight: 1.0 })
-            .insert(Acceleration(Vec2::new(0.0, -1.0)))
             .insert(Generation{ generation_id: generation})
             .insert(CollisionLayers::new(
                 [Layer::Craber],

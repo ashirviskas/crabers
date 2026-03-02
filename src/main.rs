@@ -37,7 +37,6 @@ const WALL_THICKNESS: f32 = 60.0;
 const RAVERS_TIMER: f32 = 0.2;
 const GRAVITY: f32 = 0.0;
 
-const FORCE_APPLICATION_RATE: f32 = 0.5;
 
 const VISION_UPDATE_RATE: f32 = 0.1;
 
@@ -104,7 +103,9 @@ fn main() {
 
         // .add_systems(Update, do_decollisions)
         .add_systems(Update, vision_update)
-        .add_systems(Update, apply_acceleration)
+        .add_systems(Update, apply_rotation)
+        .add_systems(Update, apply_alignment)
+        .add_systems(Update, apply_kick)
         .add_systems(Update, brain_update)
         .add_systems(Update, craber_lose_energy)
         .add_systems(Update, craber_lose_health)
@@ -164,11 +165,6 @@ fn setup(mut commands: Commands) {
         RAVERS_TIMER,
         TimerMode::Repeating,
     )));
-    commands.insert_resource(ForceApplicationTimer(Timer::from_seconds(
-        FORCE_APPLICATION_RATE,
-        TimerMode::Repeating,
-    )));
-
     commands.insert_resource(VisionUpdateTimer(Timer::from_seconds(
         VISION_UPDATE_RATE,
         TimerMode::Repeating,
@@ -552,67 +548,72 @@ fn do_despawning(
     }
 }
 
-fn apply_acceleration(
-    _commands: Commands,
+/// System 1: Continuous rotation via torque
+fn apply_rotation(
+    mut query: Query<(
+        &mut ExternalTorque,
+        &Brain,
+    ), With<Craber>>,
+) {
+    for (mut external_torque, brain) in query.iter_mut() {
+        let rotation = brain.get_rotation();
+        let torque = -rotation * TORQUE_SCALE;
+        external_torque.set_torque(torque);
+    }
+}
+
+/// System 2: Continuous perpendicular velocity damping (keel effect)
+fn apply_alignment(
+    mut query: Query<(
+        &mut ExternalForce,
+        &LinearVelocity,
+        &Transform,
+        &Brain,
+    ), With<Craber>>,
+) {
+    for (mut external_force, linear_velocity, transform, brain) in query.iter_mut() {
+        let alignment = brain.get_align_velocity();
+        let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
+        let current_vel = linear_velocity.0;
+        let parallel = facing_dir * current_vel.dot(facing_dir);
+        let perpendicular = current_vel - parallel;
+        let damping_force = -perpendicular * alignment * ALIGN_DAMPING_COEFF;
+        external_force.apply_force(damping_force);
+    }
+}
+
+/// System 3: Accumulator-gated kick impulse
+fn apply_kick(
     mut query: Query<(
         Entity,
-        &mut LinearVelocity,
-        &mut AngularVelocity,
-        &Acceleration,
+        &mut ExternalImpulse,
+        &mut KickAccumulator,
         &Transform,
-        &mut ExternalForce,
-        &mut Brain,
-    )>,
+        &Brain,
+    ), With<Craber>>,
     time: Res<Time>,
-    mut timer: ResMut<ForceApplicationTimer>,
     mut lose_energy_events: EventWriter<LoseEnergyEvent>,
 ) {
-    if !timer.0.tick(time.delta()).just_finished() {
-        return;
-    }
-    for (
-        entity,
-        mut linear_velocity,
-        mut angular_velocity,
-        acceleration,
-        transform,
-        mut external_force,
-        mut brain,
-    ) in query.iter_mut()
-    {   
-        let rotation_vector = brain.get_rotation();
-        if rotation_vector != 0.0 {
-            // println!("Rotation vector: {}", rotation_vector);
-            // negative - counter clockwise, positive - clockwise
-            angular_velocity.0 = -rotation_vector;
-            // stupid workaround for vision decay, should be moved into the brain or a separate vision system
-            // TODO Fix it
-            brain.update_input(NeuronType::NearestFoodAngle, 0.0);
-            brain.update_input(NeuronType::NearestCraberAngle, 0.0);
-            brain.feed_forward();
+    let dt = time.delta_seconds();
+    for (entity, mut external_impulse, mut accumulator, transform, brain) in query.iter_mut() {
+        let kick_rate = brain.get_kick_rate();
+        let kick_strength = brain.get_kick_strength();
 
+        accumulator.0 += kick_rate * dt;
+        if accumulator.0 < KICK_THRESHOLD {
+            continue;
         }
-        let force = transform
-            .rotation
-            .mul_vec3(acceleration.0.extend(0.0) * 100.);
-        let force_2d = Vec2::new(force.x, force.y);
-        let mut brain_forward_acceleration = brain.get_forward_acceleration();
-        if brain_forward_acceleration > 10. {
-            brain_forward_acceleration = 9.99;
-        }
-        if brain_forward_acceleration < -10. {
-            brain_forward_acceleration = -9.99;
-        }
-        let new_velocity = force_2d * brain_forward_acceleration;
-        linear_velocity.0 = new_velocity;
-        let energy_lost = brain_forward_acceleration.abs().powf(1.2) * CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER;
-        lose_energy_events.send(LoseEnergyEvent{
-            entity, energy_lost
+        accumulator.0 = 0.0;
+
+        let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
+        let thrust = facing_dir * kick_strength * MAX_IMPULSE;
+        external_impulse.apply_impulse(thrust);
+
+        let energy_cost = kick_strength.powf(1.2) * KICK_ENERGY_MODIFIER;
+        lose_energy_events.send(LoseEnergyEvent {
+            entity,
+            energy_lost: energy_cost,
         });
-        // Debug, apply rotation as force
-        // external_force.apply_force(Vec2::new(rotation_vector * 100., 0.));
-        // linear_velocity.0 += rotation_vector * 100.;
-        // println!("Rotation vector: {}", rotation_vector);
     }
 }
 

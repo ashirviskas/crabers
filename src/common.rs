@@ -116,8 +116,13 @@ pub fn print_current_entity_count(
     }
 }
 
-#[derive(Resource)]
-pub struct ForceApplicationTimer(pub Timer);
+// Movement constants
+pub const MAX_IMPULSE: f32 = 50.0;
+pub const KICK_THRESHOLD: f32 = 0.01;
+pub const TORQUE_SCALE: f32 = 5.0;
+pub const LINEAR_DAMPING_VALUE: f32 = 2.0;
+pub const ALIGN_DAMPING_COEFF: f32 = 10.0;
+pub const KICK_ENERGY_MODIFIER: f32 = 0.1;
 
 #[derive(Resource)]
 pub struct SyncVisionPositionTimer(pub Timer);

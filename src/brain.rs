@@ -26,8 +26,10 @@ pub enum NeuronType {
     // Hidden
     Hidden,
     // Output
-    MoveForward, // ?
-    Rotate, // WIP
+    KickStrength, // How hard each kick pushes (sigmoid, 0-1)
+    KickRate, // How often kicks fire (sigmoid, 0-1; 0=disabled, 1=max)
+    AlignVelocity, // How much velocity redirects toward facing (sigmoid, 0-1)
+    Rotate, // Continuous angular torque (tanh, -1 to +1)
     ModifyBrainInterval, // TODO
     WantToMate,
     WantToAttack,
@@ -58,7 +60,9 @@ impl NeuronType {
 
     pub fn random_output_type() -> Self {
         let output_types = vec![
-            NeuronType::MoveForward,
+            NeuronType::KickStrength,
+            NeuronType::KickRate,
+            NeuronType::AlignVelocity,
             NeuronType::Rotate,
             NeuronType::ModifyBrainInterval,
             NeuronType::WantToMate,
@@ -167,8 +171,18 @@ impl Brain {
         ];
         let outputs = vec![
             Neuron {
-                neuron_type: NeuronType::MoveForward,
-                activation_function: ActivationFunction::None,
+                neuron_type: NeuronType::KickStrength,
+                activation_function: ActivationFunction::Sigmoid,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::KickRate,
+                activation_function: ActivationFunction::Sigmoid,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::AlignVelocity,
+                activation_function: ActivationFunction::Sigmoid,
                 value: 0.0,
             },
             Neuron {
@@ -188,7 +202,7 @@ impl Brain {
             value: 0.0,
         }];
         let connections = vec![
-            // Always on to move forward
+            // AlwaysOn -> KickStrength (sigmoid(1.0)=0.73, moderate kicks)
             Connection {
                 from_id: 0,
                 to_id: 200,
@@ -196,7 +210,23 @@ impl Brain {
                 bias: 0.0,
                 enabled: true,
             },
-            // Food angle to hidden
+            // AlwaysOn -> KickRate (sigmoid(1.0)=0.73, fairly frequent)
+            Connection {
+                from_id: 0,
+                to_id: 201,
+                weight: 1.0,
+                bias: 0.0,
+                enabled: true,
+            },
+            // AlwaysOn -> AlignVelocity (sigmoid(2.0)=0.88, mostly ship-like)
+            Connection {
+                from_id: 0,
+                to_id: 202,
+                weight: 2.0,
+                bias: 0.0,
+                enabled: true,
+            },
+            // FoodAngle -> Hidden
             Connection {
                 from_id: 1,
                 to_id: 100,
@@ -204,7 +234,7 @@ impl Brain {
                 bias: 0.0,
                 enabled: true,
             },
-            // Craber angle to hidden
+            // CraberAngle -> Hidden
             Connection {
                 from_id: 3,
                 to_id: 100,
@@ -212,18 +242,18 @@ impl Brain {
                 bias: 0.0,
                 enabled: true,
             },
-            // Hidden to rotate
+            // Hidden -> Rotate
             Connection {
                 from_id: 100,
-                to_id: 201,
-                weight: 4.5, // To make it rotate harder
+                to_id: 203,
+                weight: 4.5,
                 bias: 0.0,
                 enabled: true,
             },
-            // Always on to want to attack TODO: Remove after testing
+            // AlwaysOn -> WantToAttack
             Connection {
                 from_id: 0,
-                to_id: 202,
+                to_id: 204,
                 weight: 0.5,
                 bias: 0.0,
                 enabled: true,
@@ -295,14 +325,29 @@ impl Brain {
         }
         rotation
     }
-    pub fn get_forward_acceleration(&self) -> f32 {
-        let mut acceleration = 0.0;
+    pub fn get_kick_strength(&self) -> f32 {
         for neuron in self.outputs.iter() {
-            if neuron.neuron_type == NeuronType::MoveForward {
-                acceleration = neuron.value;
+            if neuron.neuron_type == NeuronType::KickStrength {
+                return neuron.value;
             }
         }
-        acceleration
+        0.0
+    }
+    pub fn get_kick_rate(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::KickRate {
+                return neuron.value;
+            }
+        }
+        0.0
+    }
+    pub fn get_align_velocity(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::AlignVelocity {
+                return neuron.value;
+            }
+        }
+        0.0
     }
     pub fn get_want_to_attack(&self) -> f32 {
         let mut want_to_attack = 0.0;
