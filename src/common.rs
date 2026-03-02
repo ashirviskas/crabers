@@ -119,12 +119,18 @@ pub fn print_current_entity_count(
 // Movement constants
 pub const MAX_IMPULSE: f32 = 60000.0;
 pub const KICK_THRESHOLD: f32 = 0.01;
-pub const TORQUE_SCALE: f32 = 30.0;
+pub const TORQUE_SCALE: f32 = 3000.0;
 pub const LINEAR_DAMPING_VALUE: f32 = 2.0;
 pub const ALIGN_DAMPING_COEFF: f32 = 10.0;
 pub const KICK_ENERGY_MODIFIER: f32 = 5.0;
 pub const KICK_STEEPNESS: f32 = 0.5;
 pub const KICK_RATE_STEEPNESS: f32 = 0.5;
+
+// Brain tick constants
+pub const BRAIN_TICK_BASE_RATE: f32 = 15.0; // base ticks per second (Hz) — reference/default only
+pub const BRAIN_TICK_MIN_RATE: f32 = 1.0; // min ticks per second (Hz)
+pub const BRAIN_TICK_MAX_RATE: f32 = 30.0; // max ticks per second (Hz)
+pub const BRAIN_TICK_ENERGY_COST: f32 = 0.05; // energy per tick
 
 #[derive(Resource)]
 pub struct SyncVisionPositionTimer(pub Timer);

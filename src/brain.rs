@@ -165,6 +165,11 @@ impl Brain {
                 activation_function: ActivationFunction::None,
                 value: 0.0,
             },
+            Neuron {
+                neuron_type: NeuronType::BrainInterval,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
         ];
         let outputs = vec![
             Neuron {
@@ -190,6 +195,11 @@ impl Brain {
             Neuron {
                 neuron_type: NeuronType::WantToAttack,
                 activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::ModifyBrainInterval,
+                activation_function: ActivationFunction::Sigmoid,
                 value: 0.0,
             },
         ];
@@ -367,6 +377,15 @@ impl Brain {
             }
         }
         want_to_defend
+    }
+
+    pub fn get_modify_brain_interval(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::ModifyBrainInterval {
+                return neuron.value;
+            }
+        }
+        0.0
     }
 
     pub fn feed_forward(&mut self) {

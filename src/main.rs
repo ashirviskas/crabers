@@ -548,7 +548,7 @@ fn apply_rotation(mut query: Query<(&mut ExternalTorque, &Brain), With<Craber>>)
     for (mut external_torque, brain) in query.iter_mut() {
         let rotation = brain.get_rotation();
         let torque = rotation * TORQUE_SCALE;
-        external_torque.apply_torque(torque);
+        external_torque.set_torque(torque);
     }
 }
 
@@ -731,15 +731,37 @@ pub fn vision_update(
 }
 
 pub fn brain_update(
-    mut query: Query<(&mut Brain, &mut Craber, &Children)>,
+    mut query: Query<(
+        Entity,
+        &mut Brain,
+        &mut Craber,
+        &mut BrainTickAccumulator,
+        &Children,
+    )>,
     mut vision_query: Query<(&mut Vision, &Transform)>,
     time: Res<Time>,
+    mut lose_energy_events: EventWriter<LoseEnergyEvent>,
 ) {
-    for (mut brain, mut craber, children) in query.iter_mut() {
-        // Update inputs
-        // if vision_query.get(children[0]).unwrap().0.see_food {
+    let dt = time.delta_seconds();
+    for (entity, mut brain, mut craber, mut accumulator, children) in query.iter_mut() {
+        // Compute effective tick rate from ModifyBrainInterval output (0-1 sigmoid)
+        let modify_output = brain.get_modify_brain_interval().clamp(0.0, 1.0);
+        let effective_rate =
+            BRAIN_TICK_MIN_RATE + modify_output * (BRAIN_TICK_MAX_RATE - BRAIN_TICK_MIN_RATE);
+
+        // Accumulate time toward next tick
+        accumulator.0 += effective_rate * dt;
+        if accumulator.0 < 1.0 {
+            continue;
+        }
+        accumulator.0 -= 1.0;
+
+        // Feed the current interval (1/rate, normalized to 0-1 range) into BrainInterval input
+        let interval_normalized = (BRAIN_TICK_MIN_RATE / effective_rate).clamp(0.0, 1.0);
+        brain.update_input(NeuronType::BrainInterval, interval_normalized);
+
+        // Update vision inputs
         let mut vision = vision_query.get_mut(children[0]).unwrap().0;
-        let dt = time.delta_seconds();
         if vision.see_food {
             brain.update_input(NeuronType::NearestFoodAngle, vision.nearest_food_direction);
             brain.update_input(
@@ -774,7 +796,12 @@ pub fn brain_update(
             }
         }
         brain.feed_forward();
-        // brain.print_brain();
+
+        // Flat energy cost per brain tick
+        lose_energy_events.send(LoseEnergyEvent {
+            entity,
+            energy_lost: BRAIN_TICK_ENERGY_COST,
+        });
     }
 }
 
