@@ -548,7 +548,7 @@ fn apply_rotation(mut query: Query<(&mut ExternalTorque, &Brain), With<Craber>>)
     for (mut external_torque, brain) in query.iter_mut() {
         let rotation = brain.get_rotation();
         let torque = rotation * TORQUE_SCALE;
-        external_torque.set_torque(torque);
+        external_torque.apply_torque(torque);
     }
 }
 
@@ -584,11 +584,12 @@ fn apply_kick(
 ) {
     let dt = time.delta_seconds();
     for (entity, mut external_impulse, mut accumulator, transform, brain) in query.iter_mut() {
-        let kick_rate = brain.get_kick_rate().clamp(0.0, 1.0);
+        let kick_rate = brain.get_kick_rate().max(0.0);
+        let effective_rate = 1.0 - (-kick_rate * KICK_RATE_STEEPNESS).exp();
         let kick_strength = brain.get_kick_strength().max(0.0);
         let effective_strength = 1.0 - (-kick_strength * KICK_STEEPNESS).exp();
 
-        accumulator.0 += kick_rate * dt;
+        accumulator.0 += effective_rate * dt;
         if accumulator.0 < KICK_THRESHOLD {
             continue;
         }
@@ -663,7 +664,15 @@ pub fn vision_update(
                     );
                     vision.see_food = true;
                     let rot_angle = transform.rotation.to_euler(EulerRot::ZYX).0;
-                    println!("FOOD raw_pt:{} dist:{:.2} norm_pt:{} facing:{} rot:{:.2}rad angle:{:.3}", closest_point * min_distance, min_distance, closest_point, craber_direction, rot_angle, vision.nearest_food_direction);
+                    println!(
+                        "FOOD raw_pt:{} dist:{:.2} norm_pt:{} facing:{} rot:{:.2}rad angle:{:.3}",
+                        closest_point * min_distance,
+                        min_distance,
+                        closest_point,
+                        craber_direction,
+                        rot_angle,
+                        vision.nearest_food_direction
+                    );
                 }
             }
             VisionEventType::Craber => {

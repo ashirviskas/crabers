@@ -195,7 +195,7 @@ impl Brain {
         ];
         let hidden_layers = vec![Neuron {
             neuron_type: NeuronType::Hidden,
-            activation_function: ActivationFunction::None,
+            activation_function: ActivationFunction::Tanh,
             value: 0.0,
         }];
         let connections = vec![
