@@ -239,6 +239,9 @@ pub fn spawn_craber(
             .insert(AngularDamping(CRABER_ANGULAR_DAMPING))
             .insert(LinearDamping(crate::common::LINEAR_DAMPING_VALUE))
             .insert(KickAccumulator(0.0))
+            .insert(ExternalForce::default())
+            .insert(ExternalTorque::default())
+            .insert(ExternalImpulse::default())
             .insert(Name::new("Craber"))
             .insert(SpriteBundle {
                 sprite: Sprite {

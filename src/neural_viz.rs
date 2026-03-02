@@ -364,39 +364,6 @@ pub fn spawn_neuron_nodes(
             );
         }
 
-        // Debug: Show connections with computed positions
-        let mut debug_text = String::from("Connections:\n");
-        for conn in &connections {
-            let from_p = get_pos(conn.from_id);
-            let to_p = get_pos(conn.to_id);
-            debug_text.push_str(&format!(
-                "{}→{}: ({:.0},{:.0})→({:.0},{:.0})\n",
-                conn.from_id,
-                conn.to_id,
-                from_p.map(|p| p.0).unwrap_or(-1.0),
-                from_p.map(|p| p.1).unwrap_or(-1.0),
-                to_p.map(|p| p.0).unwrap_or(-1.0),
-                to_p.map(|p| p.1).unwrap_or(-1.0),
-            ));
-        }
-
-        container.spawn(TextBundle {
-            text: Text::from_section(
-                debug_text,
-                TextStyle {
-                    font_size: 10.0 * UI_SCALE,
-                    color: Color::srgba(0.8, 0.8, 0.8, 0.9),
-                    ..default()
-                },
-            ),
-            style: Style {
-                position_type: PositionType::Absolute,
-                left: Val::Px(10.0),
-                bottom: Val::Px(10.0),
-                ..default()
-            },
-            ..default()
-        });
     });
 }
 
