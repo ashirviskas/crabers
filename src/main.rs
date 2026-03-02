@@ -556,15 +556,15 @@ fn apply_rotation(mut query: Query<(&mut ExternalTorque, &Brain), With<Craber>>)
 fn apply_alignment(
     mut query: Query<(&mut ExternalForce, &LinearVelocity, &Transform, &Brain), With<Craber>>,
 ) {
-    for (mut external_force, linear_velocity, transform, brain) in query.iter_mut() {
-        let alignment = brain.get_align_velocity();
-        let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
-        let current_vel = linear_velocity.0;
-        let parallel = facing_dir * current_vel.dot(facing_dir);
-        let perpendicular = current_vel - parallel;
-        let damping_force = -perpendicular * alignment * ALIGN_DAMPING_COEFF;
-        external_force.apply_force(damping_force);
-    }
+    // for (mut external_force, linear_velocity, transform, brain) in query.iter_mut() {
+    //     let alignment = brain.get_align_velocity();
+    //     let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
+    //     let current_vel = linear_velocity.0;
+    //     let parallel = facing_dir * current_vel.dot(facing_dir);
+    //     let perpendicular = current_vel - parallel;
+    //     let damping_force = -perpendicular * alignment * ALIGN_DAMPING_COEFF;
+    //     external_force.apply_force(damping_force);
+    // }
 }
 
 /// System 3: Accumulator-gated kick impulse

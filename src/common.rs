@@ -127,7 +127,7 @@ pub const KICK_STEEPNESS: f32 = 0.5;
 pub const KICK_RATE_STEEPNESS: f32 = 0.5;
 
 // Brain tick constants
-pub const BRAIN_TICK_BASE_RATE: f32 = 15.0; // base ticks per second (Hz) — reference/default only
+// pub const BRAIN_TICK_BASE_RATE: f32 = 15.0; // base ticks per second (Hz) — reference/default only
 pub const BRAIN_TICK_MIN_RATE: f32 = 1.0; // min ticks per second (Hz)
 pub const BRAIN_TICK_MAX_RATE: f32 = 30.0; // max ticks per second (Hz)
 pub const BRAIN_TICK_ENERGY_COST: f32 = 0.05; // energy per tick
