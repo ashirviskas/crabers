@@ -547,7 +547,7 @@ fn do_despawning(
 fn apply_rotation(mut query: Query<(&mut ExternalTorque, &Brain), With<Craber>>) {
     for (mut external_torque, brain) in query.iter_mut() {
         let rotation = brain.get_rotation();
-        let torque = -rotation * TORQUE_SCALE;
+        let torque = rotation * TORQUE_SCALE;
         external_torque.set_torque(torque);
     }
 }
@@ -598,7 +598,7 @@ fn apply_kick(
         let thrust = facing_dir * effective_strength * MAX_IMPULSE;
         external_impulse.apply_impulse(thrust);
 
-        let energy_cost = effective_strength.powf(1.2) * KICK_ENERGY_MODIFIER;
+        let energy_cost = effective_strength.powf(1.5) * KICK_ENERGY_MODIFIER;
         lose_energy_events.send(LoseEnergyEvent {
             entity,
             energy_lost: energy_cost,
@@ -649,8 +649,8 @@ pub fn vision_update(
                         }
                         // println!("Doing some Manifolds {} {}", min_distance, closest_point)
                     }
-                    // Normalizing
-                    closest_point = closest_point / min_distance;
+                    // Normalizing (negated: Avian contact points face inward)
+                    closest_point = -closest_point / min_distance;
                     vision.entities_in_vision.push(vision_event.entity);
                     // let craber_transform = craber_query.get(parent.get()).unwrap().1;
                     // let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
@@ -662,7 +662,8 @@ pub fn vision_update(
                         Vec3::new(closest_point.x, closest_point.y, 0.),
                     );
                     vision.see_food = true;
-                    // println!("STUFF craber transform: {:?}, D {} Closest P {}  Radians {}", craber_transform, craber_direction, closest_point, vision.nearest_food_direction)
+                    let rot_angle = transform.rotation.to_euler(EulerRot::ZYX).0;
+                    println!("FOOD raw_pt:{} dist:{:.2} norm_pt:{} facing:{} rot:{:.2}rad angle:{:.3}", closest_point * min_distance, min_distance, closest_point, craber_direction, rot_angle, vision.nearest_food_direction);
                 }
             }
             VisionEventType::Craber => {
@@ -699,8 +700,8 @@ pub fn vision_update(
                         }
                         // println!("Doing some Manifolds {} {}", min_distance, closest_point)
                     }
-                    // Normalizing
-                    closest_point = closest_point / min_distance;
+                    // Normalizing (negated: Avian contact points face inward)
+                    closest_point = -closest_point / min_distance;
                     vision.entities_in_vision.push(vision_event.entity);
                     // let craber_transform = craber_query.get(parent.get()).unwrap().1;
                     // let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
