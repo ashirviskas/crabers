@@ -1,33 +1,33 @@
 use bevy::prelude::*;
-use rand::Rng;
 use rand::seq::SliceRandom;
-
+use rand::Rng;
 
 const CRABER_MAX_WANT_TO_ATTACK: f32 = 10.;
-
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NeuronType {
     // Input
-    AlwaysOn, // Implemented
+    AlwaysOn,     // Implemented
     CraberHealth, // TODO
-    CraberSpeed, // TODO
+    CraberSpeed,  // TODO
 
     NearestFoodAngle, // Implemented, value between -1 (left) and +1 (right) corresponding to the angle
     NearestFoodDistance, // TODO
 
-    NearestCraberAngle, // TODO
+    NearestCraberAngle,    // TODO
     NearestCraberDistance, // TODO
 
-    NearestWallAngle, // TODO
+    NearestWallAngle,    // TODO
     NearestWallDistance, // TODO
     // Interval between each update. TODO: Add cost for higher intervals.
     BrainInterval, // TODO
     // Hidden
     Hidden,
     // Output
-    MoveForward, // ?
-    Rotate, // WIP
+    KickStrength,        // How hard each kick pushes (sigmoid, 0-1)
+    KickRate,            // How often kicks fire (sigmoid, 0-1; 0=disabled, 1=max)
+    AlignVelocity,       // How much velocity redirects toward facing (sigmoid, 0-1)
+    Rotate,              // Continuous angular torque (tanh, -1 to +1)
     ModifyBrainInterval, // TODO
     WantToMate,
     WantToAttack,
@@ -58,7 +58,9 @@ impl NeuronType {
 
     pub fn random_output_type() -> Self {
         let output_types = vec![
-            NeuronType::MoveForward,
+            NeuronType::KickStrength,
+            NeuronType::KickRate,
+            NeuronType::AlignVelocity,
             NeuronType::Rotate,
             NeuronType::ModifyBrainInterval,
             NeuronType::WantToMate,
@@ -162,13 +164,27 @@ impl Brain {
                 neuron_type: NeuronType::NearestCraberDistance,
                 activation_function: ActivationFunction::None,
                 value: 0.0,
-            }
-
+            },
+            Neuron {
+                neuron_type: NeuronType::BrainInterval,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
         ];
         let outputs = vec![
             Neuron {
-                neuron_type: NeuronType::MoveForward,
-                activation_function: ActivationFunction::None,
+                neuron_type: NeuronType::KickStrength,
+                activation_function: ActivationFunction::ReLU,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::KickRate,
+                activation_function: ActivationFunction::ReLU,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::AlignVelocity,
+                activation_function: ActivationFunction::Sigmoid,
                 value: 0.0,
             },
             Neuron {
@@ -179,24 +195,45 @@ impl Brain {
             Neuron {
                 neuron_type: NeuronType::WantToAttack,
                 activation_function: ActivationFunction::None,
-                value: 0.0
-            }
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::ModifyBrainInterval,
+                activation_function: ActivationFunction::Sigmoid,
+                value: 0.0,
+            },
         ];
         let hidden_layers = vec![Neuron {
             neuron_type: NeuronType::Hidden,
-            activation_function: ActivationFunction::None,
+            activation_function: ActivationFunction::Tanh,
             value: 0.0,
         }];
         let connections = vec![
-            // Always on to move forward
+            // AlwaysOn -> KickStrength (ReLU(0.2)=0.2, gentle kicks)
             Connection {
                 from_id: 0,
                 to_id: 200,
-                weight: 1.0,
+                weight: 2.0,
                 bias: 0.0,
                 enabled: true,
             },
-            // Food angle to hidden
+            // AlwaysOn -> KickRate (ReLU(0.2)=0.2, infrequent)
+            Connection {
+                from_id: 0,
+                to_id: 201,
+                weight: 0.01,
+                bias: 0.0,
+                enabled: true,
+            },
+            // AlwaysOn -> AlignVelocity (sigmoid(2.0)=0.88, mostly ship-like)
+            Connection {
+                from_id: 0,
+                to_id: 202,
+                weight: 2.0,
+                bias: 0.0,
+                enabled: true,
+            },
+            // FoodAngle -> Hidden
             Connection {
                 from_id: 1,
                 to_id: 100,
@@ -204,26 +241,26 @@ impl Brain {
                 bias: 0.0,
                 enabled: true,
             },
-            // Craber angle to hidden
+            // CraberAngle -> Hidden
             Connection {
                 from_id: 3,
                 to_id: 100,
-                weight: 1.0,
+                weight: 0.1,
                 bias: 0.0,
-                enabled: true,
+                enabled: false,
             },
-            // Hidden to rotate
+            // Hidden -> Rotate
             Connection {
                 from_id: 100,
-                to_id: 201,
-                weight: 4.5, // To make it rotate harder
+                to_id: 203,
+                weight: 4.5,
                 bias: 0.0,
                 enabled: true,
             },
-            // Always on to want to attack TODO: Remove after testing
+            // AlwaysOn -> WantToAttack
             Connection {
                 from_id: 0,
-                to_id: 202,
+                to_id: 204,
                 weight: 0.5,
                 bias: 0.0,
                 enabled: true,
@@ -295,14 +332,29 @@ impl Brain {
         }
         rotation
     }
-    pub fn get_forward_acceleration(&self) -> f32 {
-        let mut acceleration = 0.0;
+    pub fn get_kick_strength(&self) -> f32 {
         for neuron in self.outputs.iter() {
-            if neuron.neuron_type == NeuronType::MoveForward {
-                acceleration = neuron.value;
+            if neuron.neuron_type == NeuronType::KickStrength {
+                return neuron.value;
             }
         }
-        acceleration
+        0.0
+    }
+    pub fn get_kick_rate(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::KickRate {
+                return neuron.value;
+            }
+        }
+        0.0
+    }
+    pub fn get_align_velocity(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::AlignVelocity {
+                return neuron.value;
+            }
+        }
+        0.0
     }
     pub fn get_want_to_attack(&self) -> f32 {
         let mut want_to_attack = 0.0;
@@ -327,48 +379,58 @@ impl Brain {
         want_to_defend
     }
 
+    pub fn get_modify_brain_interval(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::ModifyBrainInterval {
+                return neuron.value;
+            }
+        }
+        0.0
+    }
+
     pub fn feed_forward(&mut self) {
-        // Reset outputs and hidden
-        for output_id in 0..self.outputs.len() {
-            self.outputs[output_id].value = 0.0;
+        // Snapshot all neuron values into prev (double-buffer)
+        let max_id = 200 + self.outputs.len();
+        let mut prev = vec![0.0f32; max_id];
+        for (i, n) in self.inputs.iter().enumerate() {
+            prev[i] = n.value;
         }
-        for hidden_id in 0..self.hidden_layers.len() {
-            self.hidden_layers[hidden_id].value = 0.0;
+        for (i, n) in self.hidden_layers.iter().enumerate() {
+            prev[100 + i] = n.value;
         }
-        // Input to hidden
-        for connection_id in 0..self.connections.len() {
-            let connection = &self.connections[connection_id];
-            if !connection.enabled {
-                continue;
+        for (i, n) in self.outputs.iter().enumerate() {
+            prev[200 + i] = n.value;
+        }
+
+        // Pull-compute hidden neurons
+        for h_idx in 0..self.hidden_layers.len() {
+            let h_id = 100 + h_idx;
+            let mut sum = 0.0f32;
+            for conn in &self.connections {
+                if !conn.enabled || conn.to_id != h_id {
+                    continue;
+                }
+                if conn.from_id < prev.len() {
+                    sum += prev[conn.from_id] * conn.weight + conn.bias;
+                }
             }
-            if connection.from_id >= 100 {
-                continue;
-            }
-            let from_neuron = self.get_neuron(connection.from_id).unwrap();
-            let to_neuron = self.get_neuron(connection.to_id).unwrap().clone();
-            let new_value = to_neuron.value + from_neuron.value * connection.weight + connection.bias;
-            self.set_neuron_value(connection.to_id, new_value);
+            self.hidden_layers[h_idx].value =
+                self.hidden_layers[h_idx].activation_function.calculate(sum);
         }
-        // Hidden functions
-        for neuron in self.hidden_layers.iter_mut() {
-            neuron.value = neuron.activation_function.calculate(neuron.value);
-        }
-        // Hidden to output
-        for connection_id in 0..self.connections.len() {
-            let connection = &self.connections[connection_id];
-            if !connection.enabled {
-                continue;
+
+        // Pull-compute output neurons
+        for o_idx in 0..self.outputs.len() {
+            let o_id = 200 + o_idx;
+            let mut sum = 0.0f32;
+            for conn in &self.connections {
+                if !conn.enabled || conn.to_id != o_id {
+                    continue;
+                }
+                if conn.from_id < prev.len() {
+                    sum += prev[conn.from_id] * conn.weight + conn.bias;
+                }
             }
-            if connection.from_id < 100 || connection.from_id >= 200 {
-                continue;
-            }
-            let from_neuron = self.get_neuron(connection.from_id).unwrap();
-            let to_neuron = self.get_neuron(connection.to_id).unwrap().clone();
-            let new_value = to_neuron.value + from_neuron.value * connection.weight + connection.bias;
-            self.set_neuron_value(connection.to_id, new_value);
-        }
-        for neuron in self.outputs.iter_mut() {
-            neuron.value = neuron.activation_function.calculate(neuron.value);
+            self.outputs[o_idx].value = self.outputs[o_idx].activation_function.calculate(sum);
         }
     }
 
@@ -415,7 +477,7 @@ impl Brain {
     }
     pub fn get_brain_info(&self) -> String {
         let mut result = String::new();
-    
+
         result.push_str("Brain:\n\n");
         result.push_str("Inputs:\n");
         for neuron in self.inputs.iter() {
@@ -424,7 +486,7 @@ impl Brain {
                 neuron.neuron_type, neuron.activation_function, neuron.value
             ));
         }
-    
+
         result.push_str("Hidden:\n");
         for neuron in self.hidden_layers.iter() {
             result.push_str(&format!(
@@ -432,7 +494,7 @@ impl Brain {
                 neuron.neuron_type, neuron.activation_function, neuron.value
             ));
         }
-    
+
         result.push_str("Outputs:\n");
         for neuron in self.outputs.iter() {
             result.push_str(&format!(
@@ -440,7 +502,7 @@ impl Brain {
                 neuron.neuron_type, neuron.activation_function, neuron.value
             ));
         }
-    
+
         result.push_str("Connections:\n");
         for connection in self.connections.iter() {
             result.push_str(&format!(
@@ -454,9 +516,14 @@ impl Brain {
         }
         result
     }
-    
 
-    pub fn new_mutated_brain(&self, mutation_chance: f32, mutation_amount: f32, insertion_chance: f32, deletion_chance: f32) -> Self {
+    pub fn new_mutated_brain(
+        &self,
+        mutation_chance: f32,
+        mutation_amount: f32,
+        insertion_chance: f32,
+        deletion_chance: f32,
+    ) -> Self {
         let mut mutated_brain = self.clone();
         let mut rng = rand::thread_rng();
 
@@ -464,7 +531,8 @@ impl Brain {
         if rng.gen_range(0.0..1.) < insertion_chance {
             // rng between input/hidden/output
             // TODO. placeholder for only hidden layers
-            match rng.gen_range(0..2) { // TODO Implement outputs insertion
+            match rng.gen_range(0..2) {
+                // TODO Implement outputs insertion
                 0 => {
                     let new_neuron = Neuron {
                         neuron_type: NeuronType::random_hidden_type(),
@@ -472,7 +540,7 @@ impl Brain {
                         value: 0.0,
                     };
                     mutated_brain.hidden_layers.push(new_neuron);
-                },
+                }
                 1 => {
                     let new_neuron = Neuron {
                         neuron_type: NeuronType::random_input_type(),
@@ -480,7 +548,7 @@ impl Brain {
                         value: 0.0,
                     };
                     mutated_brain.inputs.push(new_neuron);
-                },
+                }
                 2 => {
                     let new_neuron = Neuron {
                         neuron_type: NeuronType::random_output_type(),
@@ -488,7 +556,7 @@ impl Brain {
                         value: 0.0,
                     };
                     mutated_brain.outputs.push(new_neuron);
-                },
+                }
                 _ => {}
             }
         }
@@ -497,14 +565,13 @@ impl Brain {
             let from_a = rng.gen_range(0..mutated_brain.inputs.len());
             let from_b = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
             let mut new_connection = Connection {
-                from_id: 0, // Initial placeholder value
-                to_id: 0,   // Initial placeholder value
-                weight: 0.0, // Initial placeholder value
-                bias: 0.0,   // Initial placeholder value
+                from_id: 0,     // Initial placeholder value
+                to_id: 0,       // Initial placeholder value
+                weight: 0.0,    // Initial placeholder value
+                bias: 0.0,      // Initial placeholder value
                 enabled: false, // Initial placeholder value
             };
-            match rng.gen_range(0..2)
-            {
+            match rng.gen_range(0..3) {
                 0 => {
                     let to_a = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
                     let to_b = rng.gen_range(0..mutated_brain.outputs.len()) + 200;
@@ -517,7 +584,7 @@ impl Brain {
                                 bias: rng.gen_range(-1.0..1.0),
                                 enabled: true,
                             };
-                        },
+                        }
                         1 | _ => {
                             new_connection = Connection {
                                 from_id: from_a,
@@ -526,11 +593,10 @@ impl Brain {
                                 bias: rng.gen_range(-1.0..1.0),
                                 enabled: true,
                             };
-                        },
-                        
+                        }
                     }
-                },
-                1 | _ => {
+                }
+                1 => {
                     let to_b = rng.gen_range(0..self.outputs.len()) + 200;
                     new_connection = Connection {
                         from_id: from_b,
@@ -539,7 +605,18 @@ impl Brain {
                         bias: rng.gen_range(-1.0..1.0),
                         enabled: true,
                     };
-                        
+                }
+                2 | _ => {
+                    // Hidden→hidden connection (allows self-connections)
+                    let from_h = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    let to_h = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    new_connection = Connection {
+                        from_id: from_h,
+                        to_id: to_h,
+                        weight: rng.gen_range(-1.0..1.0),
+                        bias: rng.gen_range(-1.0..1.0),
+                        enabled: true,
+                    };
                 }
             }
             mutated_brain.connections.push(new_connection);
@@ -592,6 +669,8 @@ pub struct Vision {
     pub see_food: bool,
     pub see_craber: bool,
     pub entities_in_vision: Vec<Entity>,
+    pub food_seen_timer: f32,
+    pub craber_seen_timer: f32,
 }
 
 impl Vision {

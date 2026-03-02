@@ -116,12 +116,24 @@ pub fn print_current_entity_count(
     }
 }
 
-#[derive(Resource)]
-pub struct ForceApplicationTimer(pub Timer);
+// Movement constants
+pub const MAX_IMPULSE: f32 = 60000.0;
+pub const KICK_THRESHOLD: f32 = 0.01;
+pub const TORQUE_SCALE: f32 = 3000.0;
+pub const LINEAR_DAMPING_VALUE: f32 = 2.0;
+pub const ALIGN_DAMPING_COEFF: f32 = 10.0;
+pub const KICK_ENERGY_MODIFIER: f32 = 5.0;
+pub const KICK_STEEPNESS: f32 = 0.5;
+pub const KICK_RATE_STEEPNESS: f32 = 0.5;
+
+// Brain tick constants
+// pub const BRAIN_TICK_BASE_RATE: f32 = 15.0; // base ticks per second (Hz) — reference/default only
+pub const BRAIN_TICK_MIN_RATE: f32 = 1.0; // min ticks per second (Hz)
+pub const BRAIN_TICK_MAX_RATE: f32 = 30.0; // max ticks per second (Hz)
+pub const BRAIN_TICK_ENERGY_COST: f32 = 0.05; // energy per tick
 
 #[derive(Resource)]
 pub struct SyncVisionPositionTimer(pub Timer);
-
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub enum EntityType {
@@ -411,7 +423,6 @@ impl Quadtree {
 
 /// To be used only for getting directions for food/other crabers
 pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
-
     let v1_2d = Vec2::new(v1.x, v1.y);
     let v2_2d = Vec2::new(v2.x, v2.y);
 
@@ -423,13 +434,11 @@ pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
     // Adjust angle to range [0, 2PI]
     angle_radians = angle_radians.rem_euclid(2.0 * PI);
 
-    // Normalize the angle to [-1, 1]
+    // Normalize the angle to [-1, 1] using sin for stronger small-angle response
     let normalized_value = if angle_radians <= PI {
-        // [0, PI] maps to [0, +1]
-        angle_radians / PI
+        angle_radians.sin()
     } else {
-        // [PI, 2PI] maps to [-1, 0]
-        (1. +((((angle_radians - PI) / PI) * -1.))) * -1.
+        -(2.0 * PI - angle_radians).sin()
     };
     // println!("V1: {} V2: {} normalized_value: {}, angle_radians: {}", v1, v2, normalized_value, angle_radians);
     normalized_value

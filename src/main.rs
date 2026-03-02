@@ -1,9 +1,9 @@
+use avian2d::{math::*, parry::shape::Cuboid, prelude::*};
 use bevy::{
     diagnostic::{DiagnosticsStore, FrameTimeDiagnosticsPlugin, LogDiagnosticsPlugin},
     prelude::*,
     time::{Timer, TimerMode},
 };
-use avian2d::{parry::shape::Cuboid, prelude::*, math::*};
 // use avian2d::collision::collider::parry::*;
 
 mod craber;
@@ -15,26 +15,23 @@ use brain::*;
 mod food;
 use food::*;
 
+mod neural_viz;
+use neural_viz::*;
+
 mod common;
 use bevy_pancam::{PanCam, PanCamPlugin};
-use common::{
-    Rectangle,
-    *
-};
-
+use common::{Rectangle, *};
 
 const SOME_COLLISION_THRESHOLD: f32 = 20.0;
 const FOOD_SPAWN_RATE: f32 = 0.0004;
 const CRABER_SPAWN_RATE: f32 = 0.1;
 
-const MAX_FOOD_COUNT: usize = 10000;
+pub const MAX_FOOD_COUNT: usize = 10000;
 
 const WALL_THICKNESS: f32 = 60.0;
 // const QUAD_TREE_CAPACITY: usize = 16;
 const RAVERS_TIMER: f32 = 0.2;
 const GRAVITY: f32 = 0.0;
-
-const FORCE_APPLICATION_RATE: f32 = 0.5;
 
 const VISION_UPDATE_RATE: f32 = 0.1;
 
@@ -71,6 +68,7 @@ fn main() {
         // .add_plugins(WorldInspectorPlugin::default())
         .insert_resource(SelectedEntity::default())
         .insert_resource(DebugInfo::default())
+        .insert_resource(NeuralNetworkLayout::default())
         .add_event::<DespawnEvent>()
         .add_event::<SpawnEvent>()
         .add_event::<ReproduceEvent>()
@@ -83,35 +81,37 @@ fn main() {
         .add_event::<FoodSpawnEvent>()
         .add_systems(Startup, setup)
         .add_systems(Startup, setup_ui)
+        .add_systems(Startup, setup_neural_panel)
         .add_systems(Update, entity_selection)
         .add_systems(Update, update_selected_entity_info)
         .add_systems(Update, update_ui)
+        .add_systems(Update, update_nn_layout)
+        .add_systems(Update, spawn_neuron_nodes)
+        .add_systems(Update, update_neuron_display)
         .add_systems(Update, update_debug_info)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
-        .add_systems(Update, energy_consumption)
-        .add_systems(Update, despawn_dead_crabers)
         .add_systems(Update, do_collision)
         .add_systems(Update, do_craber_collision)
-        .add_systems(Update, craber_reproduce)
         // .add_systems(Update, update_craber_color)
         // .add_systems(Update, print_current_entity_count)
-
         // .add_systems(Update, do_decollisions)
-        .add_systems(Update, spawn_craber)
         .add_systems(Update, vision_update)
-        .add_systems(Update, apply_acceleration)
+        .add_systems(Update, apply_rotation)
+        .add_systems(Update, apply_alignment)
+        .add_systems(Update, apply_kick)
         .add_systems(Update, brain_update)
         .add_systems(Update, craber_lose_energy)
         .add_systems(Update, craber_lose_health)
         .add_systems(Update, craber_attack_lose_health_add_energy)
         .add_systems(Update, do_despawning)
+        // Ordered chains: reproduction pipeline and death pipeline
+        .add_systems(Update, energy_consumption.before(craber_reproduce))
+        .add_systems(Update, craber_reproduce.before(spawn_craber))
+        .add_systems(Update, spawn_craber)
+        .add_systems(Update, despawn_dead_crabers.before(craber_despawner))
         .add_systems(Update, craber_despawner)
         .add_systems(Update, spawn_food)
-
-
-
-
         // .add_systems(Update, vision_inherit_craber_transform)
         // Fun and debug stuff
         // .add_systems(Update, ravers)
@@ -136,7 +136,7 @@ fn setup(mut commands: Commands) {
         enabled: true,              // when false, controls are disabled. See toggle example.
         zoom_to_cursor: true,       // whether to zoom towards the mouse or the center of the screen
         min_scale: 0.1,             // prevent the camera from zooming too far in
-        max_scale: 40.,       // prevent the camera from zooming too far out
+        max_scale: 40.,             // prevent the camera from zooming too far out
         ..Default::default()
     });
     commands.insert_resource(FoodSpawnTimer(Timer::from_seconds(
@@ -155,11 +155,6 @@ fn setup(mut commands: Commands) {
         RAVERS_TIMER,
         TimerMode::Repeating,
     )));
-    commands.insert_resource(ForceApplicationTimer(Timer::from_seconds(
-        FORCE_APPLICATION_RATE,
-        TimerMode::Repeating,
-    )));
-
     commands.insert_resource(VisionUpdateTimer(Timer::from_seconds(
         VISION_UPDATE_RATE,
         TimerMode::Repeating,
@@ -231,37 +226,43 @@ fn setup(mut commands: Commands) {
         .insert(Collider::rectangle(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
 
+/// Marker component for the main status/debug text UI
+#[derive(Component)]
+struct StatusText;
+
 fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
-    commands.spawn(TextBundle {
-        text: Text::from_sections([
-            TextSection {
-                value: "No craber selected".to_string(),
-                style: TextStyle {
-                    font: Default::default(),
-                    font_size: 30.0,
-                    color: Color::WHITE,
+    commands
+        .spawn(TextBundle {
+            text: Text::from_sections([
+                TextSection {
+                    value: "No craber selected".to_string(),
+                    style: TextStyle {
+                        font: Default::default(),
+                        font_size: 30.0,
+                        color: Color::WHITE,
+                    },
                 },
-            },
-            TextSection {
-                value: "\nEntities: 0\nFps: 0.0".to_string(),
-                style: TextStyle {
-                    font: Default::default(),
-                    font_size: 30.0,
-                    color: Color::WHITE,
+                TextSection {
+                    value: "\nEntities: 0\nFps: 0.0".to_string(),
+                    style: TextStyle {
+                        font: Default::default(),
+                        font_size: 30.0,
+                        color: Color::WHITE,
+                    },
                 },
-            },
-        ]),
-        // ... other properties ...
-        ..Default::default()
-    });
+            ]),
+            // ... other properties ...
+            ..Default::default()
+        })
+        .insert(StatusText);
 }
 
-fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text>) {
+fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text, With<StatusText>>) {
     for mut text in query.iter_mut() {
         if let Some(_) = selected.entity {
             text.sections[0].value = format!(
-                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}\nBrain: {}",
-                selected.health, selected.energy, selected.generation, selected.nearest_food_anlge, selected.brain_info
+                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}",
+                selected.health, selected.energy, selected.generation, selected.nearest_food_anlge
             );
         } else {
             text.sections[0].value = "No craber selected".to_string();
@@ -275,7 +276,7 @@ fn update_debug_info(
     food_query: Query<&Food>,
     diagnostics: Res<DiagnosticsStore>,
     _time: Res<Time>,
-    mut query: Query<&mut Text>,
+    mut query: Query<&mut Text, With<StatusText>>,
 ) {
     debug_info.entity_count = craber_query.iter().count() + food_query.iter().count();
     let fps = diagnostics
@@ -364,14 +365,16 @@ fn update_selected_entity_info(
 ) {
     if let Some(entity) = selected.entity {
         // Check if the selected entity is a Craber
-        if let Ok((craber_transform, craber_children, craber_generation, brain, health, energy)) = craber_query.get(entity) {
+        if let Ok((craber_transform, craber_children, craber_generation, brain, health, energy)) =
+            craber_query.get(entity)
+        {
             selected.health = health.health;
             selected.energy = energy.energy;
             selected.generation = craber_generation.generation_id;
             selected.rotation = craber_transform.rotation;
             selected.brain_info = brain.get_brain_info();
             for child in craber_children.iter() {
-                if let Ok((vision, vision_transform, _ , entity2_type)) = vision_query.get(*child) {
+                if let Ok((vision, vision_transform, _, entity2_type)) = vision_query.get(*child) {
                     selected.vision_rotation = vision_transform.rotation;
                     selected.nearest_food_anlge = vision.nearest_food_direction;
                 }
@@ -395,7 +398,6 @@ fn do_collision(
     mut despawn_events: EventWriter<DespawnEvent>,
     mut vision_events: EventWriter<VisionEvent>,
     mut craber_collision_events: EventWriter<CraberCollisionEvent>,
-
 ) {
     for Collision(contact) in collide_event_reader.read() {
         let entity1 = contact.entity1;
@@ -405,7 +407,10 @@ fn do_collision(
             if let Ok((entity2, _, entity2_type)) = query.get(entity2) {
                 match (entity1_type, entity2_type) {
                     (EntityType::Craber, EntityType::Craber) => {
-                        craber_collision_events.send(CraberCollisionEvent{entity_a: entity1, entity_b: entity2});
+                        craber_collision_events.send(CraberCollisionEvent {
+                            entity_a: entity1,
+                            entity_b: entity2,
+                        });
                     }
                     (EntityType::Craber, EntityType::Food) => {
                         if let Ok(mut craber) = craber_query.get_mut(entity1) {
@@ -425,7 +430,8 @@ fn do_collision(
                             }
                         }
                     }
-                    (EntityType::Food, EntityType::Vision) => { // Do entered vision instead and start tracking
+                    (EntityType::Food, EntityType::Vision) => {
+                        // Do entered vision instead and start tracking
                         vision_events.send(VisionEvent {
                             vision_entity: entity2,
                             entity: entity1,
@@ -447,7 +453,8 @@ fn do_collision(
                         // println!("B Food with entity {:?} entered vision", entity2);
                         // println!("Food entered vision B");
                     }
-                    (EntityType::Craber, EntityType::Vision) => { // Do entered vision instead and start tracking
+                    (EntityType::Craber, EntityType::Vision) => {
+                        // Do entered vision instead and start tracking
                         vision_events.send(VisionEvent {
                             vision_entity: entity2,
                             entity: entity1,
@@ -480,38 +487,37 @@ fn do_collision(
 
 pub fn do_craber_collision(
     mut craber_collision_events: EventReader<CraberCollisionEvent>,
-    query: Query<(
-        Entity, 
-        &Brain,
-        &LinearVelocity,
-        &AngularVelocity
-    )>,
+    query: Query<(Entity, &Brain, &LinearVelocity, &AngularVelocity)>,
     // mut lose_energy_events: EventWriter<LoseEnergyEvent>,
     // mut lose_health_events: EventWriter<LoseHealthEvent>
-    mut craber_attack_events: EventWriter<CraberAttackEvent>
-
-
+    mut craber_attack_events: EventWriter<CraberAttackEvent>,
 ) {
     for craber_collision_event in craber_collision_events.read() {
-        if let Ok((entity_a, brain_a, velocity_a, angular_a)) = query.get(craber_collision_event.entity_a) {
-            if let Ok((entity_b, brain_b, velocity_b, angular_b)) = query.get(craber_collision_event.entity_b) {
+        if let Ok((entity_a, brain_a, velocity_a, angular_a)) =
+            query.get(craber_collision_event.entity_a)
+        {
+            if let Ok((entity_b, brain_b, velocity_b, angular_b)) =
+                query.get(craber_collision_event.entity_b)
+            {
                 if brain_a.get_want_to_attack() > 0. || brain_b.get_want_to_attack() > 0. {
-                    let a_damaged = brain_b.get_want_to_attack() * 5. * velocity_b.length() - angular_b.0.abs(); // Velocity increases attack, spinning decreases
-                    let b_damaged = brain_a.get_want_to_attack() * 5. * velocity_a.length() - angular_a.0.abs();
+                    let a_damaged =
+                        brain_b.get_want_to_attack() * 5. * velocity_b.length() - angular_b.0.abs(); // Velocity increases attack, spinning decreases
+                    let b_damaged =
+                        brain_a.get_want_to_attack() * 5. * velocity_a.length() - angular_a.0.abs();
                     if a_damaged > 0. {
-                        craber_attack_events.send(CraberAttackEvent{
+                        craber_attack_events.send(CraberAttackEvent {
                             attacking_craber_entity: entity_b,
                             attacked_craber_entity: entity_a,
                             attack_damage: a_damaged,
-                            energy_to_gain: a_damaged * 0.3
+                            energy_to_gain: a_damaged * 0.3,
                         });
                     }
                     if b_damaged > 0. {
-                        craber_attack_events.send(CraberAttackEvent{
+                        craber_attack_events.send(CraberAttackEvent {
                             attacking_craber_entity: entity_a,
                             attacked_craber_entity: entity_b,
                             attack_damage: b_damaged,
-                            energy_to_gain: b_damaged * 0.3
+                            energy_to_gain: b_damaged * 0.3,
                         });
                     }
                     // lose_health_events.send(LoseHealthEvent{entity: entity_a, health_lost: energy_lost_a});
@@ -519,10 +525,9 @@ pub fn do_craber_collision(
                     // // // hack to actually get energy
                     // lose_energy_events.send(LoseEnergyEvent{entity: entity_a, energy_lost: -energy_lost_b});
                     // lose_energy_events.send(LoseEnergyEvent{entity: entity_b, energy_lost: -energy_lost_a});
-
                 }
+            }
         }
-    }
     }
 }
 
@@ -538,67 +543,67 @@ fn do_despawning(
     }
 }
 
-fn apply_acceleration(
-    _commands: Commands,
-    mut query: Query<(
-        Entity,
-        &mut LinearVelocity,
-        &mut AngularVelocity,
-        &Acceleration,
-        &Transform,
-        &mut ExternalForce,
-        &mut Brain,
-    )>,
+/// System 1: Continuous rotation via torque
+fn apply_rotation(mut query: Query<(&mut ExternalTorque, &Brain), With<Craber>>) {
+    for (mut external_torque, brain) in query.iter_mut() {
+        let rotation = brain.get_rotation();
+        let torque = rotation * TORQUE_SCALE;
+        external_torque.set_torque(torque);
+    }
+}
+
+/// System 2: Continuous perpendicular velocity damping (keel effect)
+fn apply_alignment(
+    mut query: Query<(&mut ExternalForce, &LinearVelocity, &Transform, &Brain), With<Craber>>,
+) {
+    // for (mut external_force, linear_velocity, transform, brain) in query.iter_mut() {
+    //     let alignment = brain.get_align_velocity();
+    //     let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
+    //     let current_vel = linear_velocity.0;
+    //     let parallel = facing_dir * current_vel.dot(facing_dir);
+    //     let perpendicular = current_vel - parallel;
+    //     let damping_force = -perpendicular * alignment * ALIGN_DAMPING_COEFF;
+    //     external_force.apply_force(damping_force);
+    // }
+}
+
+/// System 3: Accumulator-gated kick impulse
+fn apply_kick(
+    mut query: Query<
+        (
+            Entity,
+            &mut ExternalImpulse,
+            &mut KickAccumulator,
+            &Transform,
+            &Brain,
+        ),
+        With<Craber>,
+    >,
     time: Res<Time>,
-    mut timer: ResMut<ForceApplicationTimer>,
     mut lose_energy_events: EventWriter<LoseEnergyEvent>,
 ) {
-    if !timer.0.tick(time.delta()).just_finished() {
-        return;
-    }
-    for (
-        entity,
-        mut linear_velocity,
-        mut angular_velocity,
-        acceleration,
-        transform,
-        mut external_force,
-        mut brain,
-    ) in query.iter_mut()
-    {   
-        let rotation_vector = brain.get_rotation();
-        if rotation_vector != 0.0 {
-            // println!("Rotation vector: {}", rotation_vector);
-            // negative - counter clockwise, positive - clockwise
-            angular_velocity.0 = -rotation_vector;
-            // stupid workaround for vision decay, should be moved into the brain or a separate vision system
-            // TODO Fix it
-            brain.update_input(NeuronType::NearestFoodAngle, 0.0);
-            brain.update_input(NeuronType::NearestCraberAngle, 0.0);
-            brain.feed_forward();
+    let dt = time.delta_seconds();
+    for (entity, mut external_impulse, mut accumulator, transform, brain) in query.iter_mut() {
+        let kick_rate = brain.get_kick_rate().max(0.0);
+        let effective_rate = 1.0 - (-kick_rate * KICK_RATE_STEEPNESS).exp();
+        let kick_strength = brain.get_kick_strength().max(0.0);
+        let effective_strength = 1.0 - (-kick_strength * KICK_STEEPNESS).exp();
 
+        accumulator.0 += effective_rate * dt;
+        if accumulator.0 < KICK_THRESHOLD {
+            continue;
         }
-        let force = transform
-            .rotation
-            .mul_vec3(acceleration.0.extend(0.0) * 100.);
-        let force_2d = Vec2::new(force.x, force.y);
-        let mut brain_forward_acceleration = brain.get_forward_acceleration();
-        if brain_forward_acceleration > 10. {
-            brain_forward_acceleration = 9.99;
-        }
-        if brain_forward_acceleration < -10. {
-            brain_forward_acceleration = -9.99;
-        }
-        let new_velocity = force_2d * brain_forward_acceleration;
-        linear_velocity.0 = new_velocity;
-        let energy_lost = brain_forward_acceleration.abs().powf(1.2) * CRABER_ACCELERATION_ENERGY_PENALTY_MODIFIER;
-        lose_energy_events.send(LoseEnergyEvent{
-            entity, energy_lost
+        accumulator.0 = 0.0;
+
+        let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
+        let thrust = facing_dir * effective_strength * MAX_IMPULSE;
+        external_impulse.apply_impulse(thrust);
+
+        let energy_cost = effective_strength.powf(1.5) * KICK_ENERGY_MODIFIER;
+        lose_energy_events.send(LoseEnergyEvent {
+            entity,
+            energy_lost: energy_cost,
         });
-        // Debug, apply rotation as force
-        // external_force.apply_force(Vec2::new(rotation_vector * 100., 0.));
-        // linear_velocity.0 += rotation_vector * 100.;
-        // println!("Rotation vector: {}", rotation_vector);
     }
 }
 
@@ -612,53 +617,63 @@ pub fn vision_update(
     for vision_event in vision_events.read() {
         match vision_event.event_type {
             VisionEventType::Food => {
-                    // println!("Enterantation happened!");
-                    if let Ok((mut vision, transform, collider, parent)) =
-                        query.get_mut(vision_event.vision_entity)
-                    {
-                        // println!("See food true");
-                        let manifolds = &vision_event.manifolds;
-                        // let mut closest_manifold: Option<&ContactManifold> = None;
-                        let mut min_distance = f32::MAX;
-                        let mut closest_point = Vec2::new(0.0, 0.0);
+                // println!("Enterantation happened!");
+                if let Ok((mut vision, transform, collider, parent)) =
+                    query.get_mut(vision_event.vision_entity)
+                {
+                    // println!("See food true");
+                    let manifolds = &vision_event.manifolds;
+                    // let mut closest_manifold: Option<&ContactManifold> = None;
+                    let mut min_distance = f32::MAX;
+                    let mut closest_point = Vec2::new(0.0, 0.0);
 
-                        for manifold in manifolds {
-                            for contact in &manifold.contacts {
-                                if vision_event.entity_id == 1 {
-                                    // Compute the distance to the circle's center
-                                    let distance = contact.point1.length() - contact.penetration;
+                    for manifold in manifolds {
+                        for contact in &manifold.contacts {
+                            if vision_event.entity_id == 1 {
+                                // Compute the distance to the circle's center
+                                let distance = contact.point1.length() - contact.penetration;
 
-                                    // Update the closest manifold if this distance is smaller
-                                    if distance < min_distance {
-                                        min_distance = distance;
-                                        closest_point = contact.point1;
-                                    }
+                                // Update the closest manifold if this distance is smaller
+                                if distance < min_distance {
+                                    min_distance = distance;
+                                    closest_point = contact.point1;
                                 }
-                                else {
-                                    let distance = contact.point2.length() - contact.penetration;
+                            } else {
+                                let distance = contact.point2.length() - contact.penetration;
 
-                                    // Update the closest manifold if this distance is smaller
-                                    if distance < min_distance {
-                                        min_distance = distance;
-                                        closest_point = contact.point2;
-                                    }
+                                // Update the closest manifold if this distance is smaller
+                                if distance < min_distance {
+                                    min_distance = distance;
+                                    closest_point = contact.point2;
                                 }
                             }
-                            // println!("Doing some Manifolds {} {}", min_distance, closest_point)
                         }
-                        // Normalizing
-                        closest_point = closest_point / min_distance;
-                        vision.entities_in_vision.push(vision_event.entity);
-                        // let craber_transform = craber_query.get(parent.get()).unwrap().1;
-                        // let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
-                        let vision_direction = transform.rotation.mul_vec3(Vec3::Y);
-                        let craber_direction = vision_direction;
-                        vision.nearest_food_distance = min_distance;
-                        vision.nearest_food_direction = angle_direction_between_vectors(craber_direction, Vec3::new(closest_point.x, closest_point.y, 0.));
-                        vision.see_food = true;
-                        // println!("STUFF craber transform: {:?}, D {} Closest P {}  Radians {}", craber_transform, craber_direction, closest_point, vision.nearest_food_direction)
-
+                        // println!("Doing some Manifolds {} {}", min_distance, closest_point)
                     }
+                    // Normalizing (negated: Avian contact points face inward)
+                    closest_point = -closest_point / min_distance;
+                    vision.entities_in_vision.push(vision_event.entity);
+                    // let craber_transform = craber_query.get(parent.get()).unwrap().1;
+                    // let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
+                    let vision_direction = transform.rotation.mul_vec3(Vec3::Y);
+                    let craber_direction = vision_direction;
+                    vision.nearest_food_distance = min_distance;
+                    vision.nearest_food_direction = angle_direction_between_vectors(
+                        craber_direction,
+                        Vec3::new(closest_point.x, closest_point.y, 0.),
+                    );
+                    vision.see_food = true;
+                    let rot_angle = transform.rotation.to_euler(EulerRot::ZYX).0;
+                    println!(
+                        "FOOD raw_pt:{} dist:{:.2} norm_pt:{} facing:{} rot:{:.2}rad angle:{:.3}",
+                        closest_point * min_distance,
+                        min_distance,
+                        closest_point,
+                        craber_direction,
+                        rot_angle,
+                        vision.nearest_food_direction
+                    );
+                }
             }
             VisionEventType::Craber => {
                 // println!("Enterantation happened!");
@@ -682,8 +697,7 @@ pub fn vision_update(
                                     min_distance = distance;
                                     closest_point = contact.point1;
                                 }
-                            }
-                            else {
+                            } else {
                                 let distance = contact.point2.length() - contact.penetration;
 
                                 // Update the closest manifold if this distance is smaller
@@ -695,77 +709,106 @@ pub fn vision_update(
                         }
                         // println!("Doing some Manifolds {} {}", min_distance, closest_point)
                     }
-                    // Normalizing
-                    closest_point = closest_point / min_distance;
+                    // Normalizing (negated: Avian contact points face inward)
+                    closest_point = -closest_point / min_distance;
                     vision.entities_in_vision.push(vision_event.entity);
                     // let craber_transform = craber_query.get(parent.get()).unwrap().1;
                     // let craber_direction = craber_transform.rotation.mul_vec3(Vec3::Y);
                     let vision_direction = transform.rotation.mul_vec3(Vec3::Y);
                     let craber_direction = vision_direction;
                     vision.nearest_craber_distance = min_distance;
-                    vision.nearest_craber_direction = angle_direction_between_vectors(craber_direction, Vec3::new(closest_point.x, closest_point.y, 0.));
+                    vision.nearest_craber_direction = angle_direction_between_vectors(
+                        craber_direction,
+                        Vec3::new(closest_point.x, closest_point.y, 0.),
+                    );
                     vision.see_craber = true;
                     // println!("STUFF craber transform: {:?}, D {} Closest P {}  Radians {}", craber_transform, craber_direction, closest_point, vision.nearest_food_direction)
-
                 }
-        }
+            }
             _ => {}
         }
     }
 }
 
 pub fn brain_update(
-    mut query: Query<(&mut Brain, &mut Craber, &Children)>,
+    mut query: Query<(
+        Entity,
+        &mut Brain,
+        &mut Craber,
+        &mut BrainTickAccumulator,
+        &Children,
+    )>,
     mut vision_query: Query<(&mut Vision, &Transform)>,
     time: Res<Time>,
+    mut lose_energy_events: EventWriter<LoseEnergyEvent>,
 ) {
-    for (mut brain, mut craber, children) in query.iter_mut() {
-        // Update inputs
-        // if vision_query.get(children[0]).unwrap().0.see_food {
-            let mut vision = vision_query.get_mut(children[0]).unwrap().0;
-            if vision.see_food {
-                // println!("See food! {:?} C: {:?}", brain, craber);
+    let dt = time.delta_seconds();
+    for (entity, mut brain, mut craber, mut accumulator, children) in query.iter_mut() {
+        // Compute effective tick rate from ModifyBrainInterval output (0-1 sigmoid)
+        let modify_output = brain.get_modify_brain_interval().clamp(0.0, 1.0);
+        let effective_rate =
+            BRAIN_TICK_MIN_RATE + modify_output * (BRAIN_TICK_MAX_RATE - BRAIN_TICK_MIN_RATE);
 
-                // println!("Brain before: {}", )
-                brain.update_input(
-                    NeuronType::NearestFoodAngle,
-                    vision.nearest_food_direction
-                );
-                brain.update_input(
-                    NeuronType::NearestFoodDistance,
-                     vision.nearest_food_distance
-                );
-                vision.no_see_food();
-            } else {
-                // decay vision
+        // Accumulate time toward next tick
+        accumulator.0 += effective_rate * dt;
+        if accumulator.0 < 1.0 {
+            continue;
+        }
+        accumulator.0 -= 1.0;
 
-                // brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
+        // Feed the current interval (1/rate, normalized to 0-1 range) into BrainInterval input
+        let interval_normalized = (BRAIN_TICK_MIN_RATE / effective_rate).clamp(0.0, 1.0);
+        brain.update_input(NeuronType::BrainInterval, interval_normalized);
+
+        // Update vision inputs
+        let mut vision = vision_query.get_mut(children[0]).unwrap().0;
+        if vision.see_food {
+            brain.update_input(NeuronType::NearestFoodAngle, vision.nearest_food_direction);
+            brain.update_input(
+                NeuronType::NearestFoodDistance,
+                vision.nearest_food_distance,
+            );
+            vision.food_seen_timer = VISION_UPDATE_RATE;
+            vision.no_see_food();
+        } else {
+            vision.food_seen_timer -= dt;
+            if vision.food_seen_timer <= 0.0 {
+                brain.update_input(NeuronType::NearestFoodAngle, 0.0);
+                brain.update_input(NeuronType::NearestFoodDistance, 0.0);
             }
-            if vision.see_craber {
-                // println!("See food! {:?} C: {:?}", brain, craber);
-
-                // println!("Brain before: {}", )
-                brain.update_input(
-                    NeuronType::NearestCraberAngle,
-                    vision.nearest_craber_direction
-                );
-                brain.update_input(
-                    NeuronType::NearestCraberDistance,
-                     vision.nearest_craber_distance
-                );
-                vision.no_see_craber();
-            } else {
-                // decay vision
-
-                // brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
+        }
+        if vision.see_craber {
+            brain.update_input(
+                NeuronType::NearestCraberAngle,
+                vision.nearest_craber_direction,
+            );
+            brain.update_input(
+                NeuronType::NearestCraberDistance,
+                vision.nearest_craber_distance,
+            );
+            vision.craber_seen_timer = VISION_UPDATE_RATE;
+            vision.no_see_craber();
+        } else {
+            vision.craber_seen_timer -= dt;
+            if vision.craber_seen_timer <= 0.0 {
+                brain.update_input(NeuronType::NearestCraberAngle, 0.0);
+                brain.update_input(NeuronType::NearestCraberDistance, 0.0);
             }
+        }
         brain.feed_forward();
-        // brain.print_brain();
+
+        // Flat energy cost per brain tick
+        lose_energy_events.send(LoseEnergyEvent {
+            entity,
+            energy_lost: BRAIN_TICK_ENERGY_COST,
+        });
     }
 }
 
-pub fn craber_lose_energy(mut lose_energy_events: EventReader<LoseEnergyEvent>, mut query: Query<&mut Energy>)
-{
+pub fn craber_lose_energy(
+    mut lose_energy_events: EventReader<LoseEnergyEvent>,
+    mut query: Query<&mut Energy>,
+) {
     for lose_energy_event in lose_energy_events.read() {
         if let Ok(mut energy) = query.get_mut(lose_energy_event.entity) {
             energy.energy -= lose_energy_event.energy_lost;
@@ -773,8 +816,10 @@ pub fn craber_lose_energy(mut lose_energy_events: EventReader<LoseEnergyEvent>, 
     }
 }
 
-pub fn craber_lose_health(mut lose_health_events: EventReader<LoseHealthEvent>, mut query: Query<&mut Health>)
-{
+pub fn craber_lose_health(
+    mut lose_health_events: EventReader<LoseHealthEvent>,
+    mut query: Query<&mut Health>,
+) {
     for lose_health_event in lose_health_events.read() {
         if let Ok(mut health) = query.get_mut(lose_health_event.entity) {
             health.health -= lose_health_event.health_lost;
@@ -783,33 +828,33 @@ pub fn craber_lose_health(mut lose_health_events: EventReader<LoseHealthEvent>, 
 }
 
 pub fn craber_attack_lose_health_add_energy(
-    mut craber_attack_events: EventReader<CraberAttackEvent>, 
+    mut craber_attack_events: EventReader<CraberAttackEvent>,
     mut attacked_query: Query<&mut Health>,
     mut attacker_query: Query<&mut Energy>,
-)
-{
+) {
     for craber_attack_event in craber_attack_events.read() {
         if let Ok(mut health) = attacked_query.get_mut(craber_attack_event.attacked_craber_entity) {
-            // TODO use match
-            if health.health < 0. {
+            if health.health <= 0. {
                 continue;
             }
             if health.health - craber_attack_event.attack_damage < 0. {
-                let total_attack_damage = craber_attack_event.attack_damage - health.health;
-                let energy_modifier = total_attack_damage / craber_attack_event.attack_damage;
-                if let Ok(mut energy) = attacker_query.get_mut(craber_attack_event.attacking_craber_entity) {
+                // Overkill: only deal remaining health as actual damage, scale energy gain down
+                let actual_damage = health.health;
+                let energy_modifier = actual_damage / craber_attack_event.attack_damage;
+                if let Ok(mut energy) =
+                    attacker_query.get_mut(craber_attack_event.attacking_craber_entity)
+                {
                     energy.energy += craber_attack_event.energy_to_gain * energy_modifier;
                 }
-                health.health -= total_attack_damage;
+                health.health = 0.0; // ensure death
                 continue;
             }
-            if let Ok(mut energy) = attacker_query.get_mut(craber_attack_event.attacking_craber_entity) {
+            if let Ok(mut energy) =
+                attacker_query.get_mut(craber_attack_event.attacking_craber_entity)
+            {
                 health.health -= craber_attack_event.attack_damage;
                 energy.energy += craber_attack_event.energy_to_gain;
             }
-        }   
+        }
     }
 }
-
-
-
