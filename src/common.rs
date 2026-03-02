@@ -117,16 +117,15 @@ pub fn print_current_entity_count(
 }
 
 // Movement constants
-pub const MAX_IMPULSE: f32 = 50.0;
+pub const MAX_IMPULSE: f32 = 2000.0;
 pub const KICK_THRESHOLD: f32 = 0.01;
-pub const TORQUE_SCALE: f32 = 5.0;
+pub const TORQUE_SCALE: f32 = 2000.0;
 pub const LINEAR_DAMPING_VALUE: f32 = 2.0;
 pub const ALIGN_DAMPING_COEFF: f32 = 10.0;
 pub const KICK_ENERGY_MODIFIER: f32 = 0.1;
 
 #[derive(Resource)]
 pub struct SyncVisionPositionTimer(pub Timer);
-
 
 #[derive(Component, Debug, Clone, Copy, PartialEq)]
 pub enum EntityType {
@@ -416,7 +415,6 @@ impl Quadtree {
 
 /// To be used only for getting directions for food/other crabers
 pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
-
     let v1_2d = Vec2::new(v1.x, v1.y);
     let v2_2d = Vec2::new(v2.x, v2.y);
 
@@ -434,7 +432,7 @@ pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
         angle_radians / PI
     } else {
         // [PI, 2PI] maps to [-1, 0]
-        (1. +((((angle_radians - PI) / PI) * -1.))) * -1.
+        (1. + (((angle_radians - PI) / PI) * -1.)) * -1.
     };
     // println!("V1: {} V2: {} normalized_value: {}, angle_radians: {}", v1, v2, normalized_value, angle_radians);
     normalized_value

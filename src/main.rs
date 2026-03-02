@@ -596,8 +596,8 @@ fn apply_kick(
 ) {
     let dt = time.delta_seconds();
     for (entity, mut external_impulse, mut accumulator, transform, brain) in query.iter_mut() {
-        let kick_rate = brain.get_kick_rate();
-        let kick_strength = brain.get_kick_strength();
+        let kick_rate = brain.get_kick_rate().clamp(0.0, 1.0);
+        let kick_strength = brain.get_kick_strength().clamp(0.0, 1.0);
 
         accumulator.0 += kick_rate * dt;
         if accumulator.0 < KICK_THRESHOLD {
@@ -752,9 +752,8 @@ pub fn brain_update(
                 );
                 vision.no_see_food();
             } else {
-                // decay vision
-
-                // brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
+                brain.update_input(NeuronType::NearestFoodAngle, 0.0);
+                brain.update_input(NeuronType::NearestFoodDistance, 0.0);
             }
             if vision.see_craber {
                 // println!("See food! {:?} C: {:?}", brain, craber);
@@ -770,9 +769,8 @@ pub fn brain_update(
                 );
                 vision.no_see_craber();
             } else {
-                // decay vision
-
-                // brain.update_input(NeuronType::NearestFoodAngle, std::f32::consts::PI);
+                brain.update_input(NeuronType::NearestCraberAngle, 0.0);
+                brain.update_input(NeuronType::NearestCraberDistance, 0.0);
             }
         brain.feed_forward();
         // brain.print_brain();
