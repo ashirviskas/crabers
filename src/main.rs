@@ -664,15 +664,15 @@ pub fn vision_update(
                     );
                     vision.see_food = true;
                     let rot_angle = transform.rotation.to_euler(EulerRot::ZYX).0;
-                    println!(
-                        "FOOD raw_pt:{} dist:{:.2} norm_pt:{} facing:{} rot:{:.2}rad angle:{:.3}",
-                        closest_point * min_distance,
-                        min_distance,
-                        closest_point,
-                        craber_direction,
-                        rot_angle,
-                        vision.nearest_food_direction
-                    );
+                    // println!(
+                    //     "FOOD raw_pt:{} dist:{:.2} norm_pt:{} facing:{} rot:{:.2}rad angle:{:.3}",
+                    //     closest_point * min_distance,
+                    //     min_distance,
+                    //     closest_point,
+                    //     craber_direction,
+                    //     rot_angle,
+                    //     vision.nearest_food_direction
+                    // );
                 }
             }
             VisionEventType::Craber => {

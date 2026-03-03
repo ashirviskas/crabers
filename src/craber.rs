@@ -9,7 +9,7 @@ use crate::common::*;
 use crate::brain::*;
 use crate::food;
 
-const ENERGY_CONSUMPTION_RATE: f32 = 0.15;
+const ENERGY_CONSUMPTION_RATE: f32 = 0.03;
 const CRABER_HEALING_RATE: f32 = 0.05;
 const CRABER_HEALING_COST: f32 = 1.3;
 const CRABER_DEATH_ENERGY_FACTOR: f32 = 0.7;

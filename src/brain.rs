@@ -213,7 +213,7 @@ impl Brain {
             Connection {
                 from_id: 0,
                 to_id: 200,
-                weight: 2.0,
+                weight: 0.5,
                 bias: 0.0,
                 enabled: true,
             },
@@ -221,7 +221,7 @@ impl Brain {
             Connection {
                 from_id: 0,
                 to_id: 201,
-                weight: 0.01,
+                weight: 0.05,
                 bias: 0.0,
                 enabled: true,
             },
@@ -253,7 +253,7 @@ impl Brain {
             Connection {
                 from_id: 100,
                 to_id: 203,
-                weight: 4.5,
+                weight: 2.5,
                 bias: 0.0,
                 enabled: true,
             },

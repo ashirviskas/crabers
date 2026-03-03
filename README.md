@@ -85,7 +85,7 @@ Building a WASM build:
 - [ ] Damage system
   - [x] Bite/Attack
   - [ ] Defend
-- [ ] Drop food when die
+- [x] Drop food when die
 - [ ] More complex brain
   - [ ] Ability to enable/disable connections
   - [ ] Brain costs energy (neurons, inputs, connections cost passively, each feed forward - actively)
