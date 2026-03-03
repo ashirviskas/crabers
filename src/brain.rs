@@ -1,6 +1,6 @@
 use bevy::prelude::*;
-use rand::seq::SliceRandom;
-use rand::Rng;
+use rand::RngExt;
+use rand::seq::IndexedRandom;
 
 const CRABER_MAX_WANT_TO_ATTACK: f32 = 10.;
 
@@ -48,7 +48,7 @@ impl NeuronType {
             NeuronType::NearestWallDistance,
             NeuronType::BrainInterval,
         ];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         *input_types.choose(&mut rng).unwrap()
     }
 
@@ -65,7 +65,7 @@ impl NeuronType {
             NeuronType::ModifyBrainInterval,
             NeuronType::WantToMate,
         ];
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         *output_types.choose(&mut rng).unwrap()
     }
 }
@@ -78,7 +78,6 @@ pub enum ActivationFunction {
     ReLU,
     LeakyReLU,
     Softmax,
-    // AngleToNormalizedValue,
 }
 
 impl ActivationFunction {
@@ -90,12 +89,11 @@ impl ActivationFunction {
             ActivationFunction::ReLU => value.max(0.0),
             ActivationFunction::LeakyReLU => value.max(0.01 * value),
             ActivationFunction::Softmax => value.exp() / value.exp(),
-            // ActivationFunction::AngleToNormalizedValue => Brain::angle_to_normalized_value(value),
         }
     }
     pub fn random() -> Self {
-        let mut rng = rand::thread_rng();
-        match rng.gen_range(0..5) {
+        let mut rng = rand::rng();
+        match rng.random_range(0..5) {
             0 => ActivationFunction::None,
             1 => ActivationFunction::Sigmoid,
             2 => ActivationFunction::Tanh,
@@ -306,11 +304,9 @@ impl Brain {
     }
 
     pub fn update_input(&mut self, input_neuron_type: NeuronType, value: f32) {
-        // print!("Updating craber neuron input");
         for neuron in self.inputs.iter_mut() {
             if neuron.neuron_type == input_neuron_type {
                 neuron.value = value;
-                // println!("Updated neuron type {:?} to value {}", input_neuron_type, value)
             }
         }
     }
@@ -522,16 +518,16 @@ impl Brain {
         mutation_chance: f32,
         mutation_amount: f32,
         insertion_chance: f32,
-        deletion_chance: f32,
+        _deletion_chance: f32,
     ) -> Self {
         let mut mutated_brain = self.clone();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Insertion mutations
-        if rng.gen_range(0.0..1.) < insertion_chance {
+        if rand::random_range(0.0..1.) < insertion_chance {
             // rng between input/hidden/output
             // TODO. placeholder for only hidden layers
-            match rng.gen_range(0..2) {
+            match rng.random_range(0..2) {
                 // TODO Implement outputs insertion
                 0 => {
                     let new_neuron = Neuron {
@@ -561,27 +557,28 @@ impl Brain {
             }
         }
         // insertion of connection
-        if rng.gen_range(0.0..1.) < insertion_chance {
-            let from_a = rng.gen_range(0..mutated_brain.inputs.len());
-            let from_b = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+        if rng.random_range(0.0..1.) < insertion_chance {
+            let from_a = rng.random_range(0..mutated_brain.inputs.len());
+            let from_b = rng.random_range(0..mutated_brain.hidden_layers.len()) + 100;
+            #[allow(unused_assignments)]
             let mut new_connection = Connection {
-                from_id: 0,     // Initial placeholder value
-                to_id: 0,       // Initial placeholder value
-                weight: 0.0,    // Initial placeholder value
-                bias: 0.0,      // Initial placeholder value
-                enabled: false, // Initial placeholder value
+                from_id: 0,
+                to_id: 0,
+                weight: 0.0,
+                bias: 0.0,
+                enabled: false,
             };
-            match rng.gen_range(0..3) {
+            match rng.random_range(0..3) {
                 0 => {
-                    let to_a = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
-                    let to_b = rng.gen_range(0..mutated_brain.outputs.len()) + 200;
-                    match rng.gen_range(0..2) {
+                    let to_a = rng.random_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    let to_b = rng.random_range(0..mutated_brain.outputs.len()) + 200;
+                    match rng.random_range(0..2) {
                         0 => {
                             new_connection = Connection {
                                 from_id: from_a,
                                 to_id: to_a,
-                                weight: rng.gen_range(-1.0..1.0),
-                                bias: rng.gen_range(-1.0..1.0),
+                                weight: rng.random_range(-1.0..1.0),
+                                bias: rng.random_range(-1.0..1.0),
                                 enabled: true,
                             };
                         }
@@ -589,32 +586,32 @@ impl Brain {
                             new_connection = Connection {
                                 from_id: from_a,
                                 to_id: to_b,
-                                weight: rng.gen_range(-1.0..1.0),
-                                bias: rng.gen_range(-1.0..1.0),
+                                weight: rng.random_range(-1.0..1.0),
+                                bias: rng.random_range(-1.0..1.0),
                                 enabled: true,
                             };
                         }
                     }
                 }
                 1 => {
-                    let to_b = rng.gen_range(0..self.outputs.len()) + 200;
+                    let to_b = rng.random_range(0..self.outputs.len()) + 200;
                     new_connection = Connection {
                         from_id: from_b,
                         to_id: to_b,
-                        weight: rng.gen_range(-1.0..1.0),
-                        bias: rng.gen_range(-1.0..1.0),
+                        weight: rng.random_range(-1.0..1.0),
+                        bias: rng.random_range(-1.0..1.0),
                         enabled: true,
                     };
                 }
                 2 | _ => {
                     // Hidden→hidden connection (allows self-connections)
-                    let from_h = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
-                    let to_h = rng.gen_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    let from_h = rng.random_range(0..mutated_brain.hidden_layers.len()) + 100;
+                    let to_h = rng.random_range(0..mutated_brain.hidden_layers.len()) + 100;
                     new_connection = Connection {
                         from_id: from_h,
                         to_id: to_h,
-                        weight: rng.gen_range(-1.0..1.0),
-                        bias: rng.gen_range(-1.0..1.0),
+                        weight: rng.random_range(-1.0..1.0),
+                        bias: rng.random_range(-1.0..1.0),
                         enabled: true,
                     };
                 }
@@ -627,26 +624,26 @@ impl Brain {
 
         for connection in mutated_brain.connections.iter_mut() {
             // Mutate the weight
-            if rng.gen_range(0.0..1.) < mutation_chance {
-                let change = rng.gen_range(-mutation_amount..mutation_amount);
+            if rng.random_range(0.0..1.) < mutation_chance {
+                let change = rng.random_range(-mutation_amount..mutation_amount);
                 connection.weight += change;
             }
 
             // Mutate the bias
-            if rng.gen_range(0.0..1.) < mutation_chance {
-                let change = rng.gen_range(-mutation_amount..mutation_amount);
+            if rng.random_range(0.0..1.) < mutation_chance {
+                let change = rng.random_range(-mutation_amount..mutation_amount);
                 connection.bias += change;
             }
 
             // Optionally, mutate the 'enabled' status
-            if rng.gen_range(0.0..1.) < mutation_chance {
+            if rng.random_range(0.0..1.) < mutation_chance {
                 connection.enabled = !connection.enabled;
             }
         }
 
         // Optionally, mutate neurons (e.g., activation functions)
         for neuron in mutated_brain.hidden_layers.iter_mut() {
-            if rng.gen_range(0.0..1.) < mutation_chance {
+            if rng.random_range(0.0..1.) < mutation_chance {
                 neuron.activation_function = ActivationFunction::random();
             }
         }
@@ -655,9 +652,6 @@ impl Brain {
     }
 }
 
-// Vision update timer
-#[derive(Resource)]
-pub struct VisionUpdateTimer(pub Timer);
 
 #[derive(Component)]
 pub struct Vision {

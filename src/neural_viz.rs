@@ -109,7 +109,7 @@ fn quadratic_bezier(p0: (f32, f32), control: (f32, f32), p1: (f32, f32), t: f32)
 }
 
 /// Spawn a single line segment between two points
-fn spawn_line_segment(parent: &mut ChildBuilder, from: (f32, f32), to: (f32, f32), color: Color) {
+fn spawn_line_segment(parent: &mut ChildSpawnerCommands, from: (f32, f32), to: (f32, f32), color: Color) {
     let dx = to.0 - from.0;
     let dy = to.1 - from.1;
     let length = (dx * dx + dy * dy).sqrt();
@@ -124,8 +124,8 @@ fn spawn_line_segment(parent: &mut ChildBuilder, from: (f32, f32), to: (f32, f32
     let top = mid_y - LINE_THICKNESS / 2.0;
 
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(left),
                 top: Val::Px(top),
@@ -133,17 +133,16 @@ fn spawn_line_segment(parent: &mut ChildBuilder, from: (f32, f32), to: (f32, f32
                 height: Val::Px(LINE_THICKNESS),
                 ..default()
             },
-            background_color: color.into(),
-            transform: Transform::from_rotation(Quat::from_rotation_z(angle)),
-            z_index: ZIndex::Local(-1),
-            ..default()
-        })
+            BackgroundColor(color),
+            Transform::from_rotation(Quat::from_rotation_z(angle)),
+            ZIndex(-1),
+        ))
         .insert(ConnectionLine);
 }
 
 /// Spawn a curved connection as ~10 line segments approximating a quadratic bezier
 fn spawn_curved_connection(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     from: (f32, f32),
     to: (f32, f32),
     weight: f32,
@@ -169,7 +168,7 @@ fn spawn_curved_connection(
 
 /// Spawn a self-loop as a small arc to the right of a neuron
 fn spawn_self_loop(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     pos: (f32, f32),
     weight: f32,
     enabled: bool,
@@ -242,8 +241,8 @@ fn neuron_label(neuron_type: NeuronType) -> &'static str {
 pub fn setup_neural_panel(mut commands: Commands) {
     // Root panel - positioned in top-right corner
     commands
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
                 position_type: PositionType::Absolute,
                 right: Val::Px(10.0),
                 top: Val::Px(10.0),
@@ -254,40 +253,35 @@ pub fn setup_neural_panel(mut commands: Commands) {
                 display: Display::None, // Hidden by default
                 ..default()
             },
-            background_color: PANEL_BG_COLOR.into(),
-            ..default()
-        })
-        .insert(NeuralNetworkPanel)
+            BackgroundColor(PANEL_BG_COLOR),
+            NeuralNetworkPanel,
+        ))
         .with_children(|parent| {
             // Title
-            parent.spawn(TextBundle {
-                text: Text::from_section(
-                    "Neural Network",
-                    TextStyle {
-                        font_size: 18.0 * UI_SCALE,
-                        color: Color::WHITE,
-                        ..default()
-                    },
-                ),
-                style: Style {
+            parent.spawn((
+                Text::new("Neural Network"),
+                TextFont {
+                    font_size: 18.0 * UI_SCALE,
+                    ..default()
+                },
+                TextColor(Color::WHITE),
+                Node {
                     margin: UiRect::bottom(Val::Px(10.0 * UI_SCALE)),
                     ..default()
                 },
-                ..default()
-            });
+            ));
 
             // Network container with relative positioning for absolute children
             parent
-                .spawn(NodeBundle {
-                    style: Style {
+                .spawn((
+                    Node {
                         width: Val::Percent(100.0),
                         height: Val::Px(380.0 * UI_SCALE),
                         position_type: PositionType::Relative,
                         ..default()
                     },
-                    ..default()
-                })
-                .insert(NetworkContainer)
+                    NetworkContainer,
+                ))
                 .with_children(|container| {
                     // Column headers
                     spawn_column_header(container, "INPUTS", COLUMN_X[0]);
@@ -298,31 +292,28 @@ pub fn setup_neural_panel(mut commands: Commands) {
 }
 
 /// Spawn a column header label
-fn spawn_column_header(parent: &mut ChildBuilder, label: &str, x: f32) {
-    parent.spawn(TextBundle {
-        text: Text::from_section(
-            label,
-            TextStyle {
-                font_size: HEADER_FONT_SIZE,
-                color: HEADER_TEXT_COLOR,
-                ..default()
-            },
-        ),
-        style: Style {
+fn spawn_column_header(parent: &mut ChildSpawnerCommands, label: &str, x: f32) {
+    parent.spawn((
+        Text::new(label),
+        TextFont {
+            font_size: HEADER_FONT_SIZE,
+            ..default()
+        },
+        TextColor(HEADER_TEXT_COLOR),
+        Node {
             position_type: PositionType::Absolute,
             left: Val::Px(x - 20.0 * UI_SCALE),
             top: Val::Px(10.0 * UI_SCALE),
             ..default()
         },
-        ..default()
-    });
+    ));
 }
 
 /// Update system: Toggle panel visibility based on selection
 pub fn update_nn_layout(
     selected: Res<SelectedEntity>,
     mut layout: ResMut<NeuralNetworkLayout>,
-    mut panel_query: Query<&mut Style, With<NeuralNetworkPanel>>,
+    mut panel_query: Query<&mut Node, With<NeuralNetworkPanel>>,
 ) {
     let new_entity = selected.entity;
 
@@ -333,8 +324,8 @@ pub fn update_nn_layout(
     }
 
     // Update panel visibility
-    for mut style in panel_query.iter_mut() {
-        style.display = if new_entity.is_some() {
+    for mut node in panel_query.iter_mut() {
+        node.display = if new_entity.is_some() {
             Display::Flex
         } else {
             Display::None
@@ -364,13 +355,13 @@ pub fn spawn_neuron_nodes(
         return;
     };
 
-    let Ok(container_entity) = container_query.get_single() else {
+    let Ok(container_entity) = container_query.single() else {
         return;
     };
 
     // Despawn existing neurons and connection lines
     for entity in existing_nodes.iter() {
-        commands.entity(entity).despawn_recursive();
+        commands.entity(entity).despawn();
     }
 
     // Clone data needed in closure
@@ -502,7 +493,7 @@ pub fn spawn_neuron_nodes(
 
 /// Spawn a connection line between two neuron positions
 fn spawn_connection_line(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     from: (f32, f32),
     to: (f32, f32),
     weight: f32,
@@ -529,8 +520,8 @@ fn spawn_connection_line(
 
     // Create a rotated line using transform
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(left),
                 top: Val::Px(top),
@@ -538,17 +529,16 @@ fn spawn_connection_line(
                 height: Val::Px(LINE_THICKNESS),
                 ..default()
             },
-            background_color: weight_to_color(weight, enabled).into(),
-            transform: Transform::from_rotation(Quat::from_rotation_z(angle)),
-            z_index: ZIndex::Local(-1), // Render behind neurons
-            ..default()
-        })
+            BackgroundColor(weight_to_color(weight, enabled)),
+            Transform::from_rotation(Quat::from_rotation_z(angle)),
+            ZIndex(-1), // Render behind neurons
+        ))
         .insert(ConnectionLine);
 }
 
 /// Spawn a neuron node with label and value text
 fn spawn_neuron(
-    parent: &mut ChildBuilder,
+    parent: &mut ChildSpawnerCommands,
     neuron_id: usize,
     layer: NeuronLayer,
     pos: (f32, f32),
@@ -557,8 +547,8 @@ fn spawn_neuron(
 ) {
     // Outer container for neuron + label
     parent
-        .spawn(NodeBundle {
-            style: Style {
+        .spawn((
+            Node {
                 position_type: PositionType::Absolute,
                 left: Val::Px(pos.0),
                 top: Val::Px(pos.1),
@@ -568,74 +558,65 @@ fn spawn_neuron(
                 align_items: AlignItems::Center,
                 ..default()
             },
-            ..default()
-        })
-        .insert(NeuronNode { neuron_id, layer })
+            NeuronNode { neuron_id, layer },
+        ))
         .with_children(|neuron_parent| {
             // Circular neuron background
             neuron_parent
-                .spawn(NodeBundle {
-                    style: Style {
+                .spawn((
+                    Node {
                         width: Val::Px(NEURON_SIZE),
                         height: Val::Px(NEURON_SIZE),
                         border: UiRect::all(Val::Px(2.0 * UI_SCALE)),
+                        border_radius: BorderRadius::all(Val::Px(NEURON_RADIUS)),
                         justify_content: JustifyContent::Center,
                         align_items: AlignItems::Center,
                         ..default()
                     },
-                    background_color: NEURON_BG_COLOR.into(),
-                    border_color: Color::srgb(0.4, 0.4, 0.5).into(),
-                    border_radius: BorderRadius::all(Val::Px(NEURON_RADIUS)),
-                    ..default()
-                })
+                    BackgroundColor(NEURON_BG_COLOR),
+                    BorderColor::from(Color::srgb(0.4, 0.4, 0.5)),
+                ))
                 .with_children(|circle| {
                     // Inner indicator that shows the value color
                     let indicator_size = NEURON_SIZE - 8.0 * UI_SCALE;
                     circle
-                        .spawn(NodeBundle {
-                            style: Style {
+                        .spawn((
+                            Node {
                                 width: Val::Px(indicator_size),
                                 height: Val::Px(indicator_size),
+                                border_radius: BorderRadius::all(Val::Px(indicator_size / 2.0)),
                                 ..default()
                             },
-                            background_color: value_to_color(initial_value).into(),
-                            border_radius: BorderRadius::all(Val::Px(indicator_size / 2.0)),
-                            ..default()
-                        })
-                        .insert(NeuronIndicator { neuron_id });
+                            BackgroundColor(value_to_color(initial_value)),
+                            NeuronIndicator { neuron_id },
+                        ));
                 });
 
             // Label text below neuron
-            neuron_parent.spawn(TextBundle {
-                text: Text::from_section(
-                    label,
-                    TextStyle {
-                        font_size: LABEL_FONT_SIZE,
-                        color: Color::srgb(0.8, 0.8, 0.8),
-                        ..default()
-                    },
-                ),
-                style: Style {
+            neuron_parent.spawn((
+                Text::new(label),
+                TextFont {
+                    font_size: LABEL_FONT_SIZE,
+                    ..default()
+                },
+                TextColor(Color::srgb(0.8, 0.8, 0.8)),
+                Node {
                     margin: UiRect::top(Val::Px(2.0 * UI_SCALE)),
                     ..default()
                 },
-                ..default()
-            });
+            ));
 
             // Value text below label
             neuron_parent
-                .spawn(TextBundle {
-                    text: Text::from_section(
-                        format!("{:.2}", initial_value),
-                        TextStyle {
-                            font_size: VALUE_FONT_SIZE,
-                            color: Color::WHITE,
-                            ..default()
-                        },
-                    ),
-                    ..default()
-                })
-                .insert(NeuronValueText { neuron_id });
+                .spawn((
+                    Text::new(format!("{:.2}", initial_value)),
+                    TextFont {
+                        font_size: VALUE_FONT_SIZE,
+                        ..default()
+                    },
+                    TextColor(Color::WHITE),
+                    NeuronValueText { neuron_id },
+                ));
         });
 }
 
@@ -663,9 +644,7 @@ pub fn update_neuron_display(
 
     for (value_text, mut text) in value_text_query.iter_mut() {
         if let Some(value) = get_neuron_value(brain, value_text.neuron_id) {
-            if let Some(section) = text.sections.first_mut() {
-                section.value = format!("{:.2}", value);
-            }
+            text.0 = format!("{:.2}", value);
         }
     }
 }
