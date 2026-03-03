@@ -254,7 +254,9 @@ fn entity_selection(
     mut selected: ResMut<SelectedEntity>,
     camera_query: Query<(&Camera, &Transform, &Projection)>,
 ) {
-    let Ok(window) = windows.single() else { return; };
+    let Ok(window) = windows.single() else {
+        return;
+    };
     if mouse_button_input.just_pressed(MouseButton::Left) {
         if let Some(position) = window.cursor_position() {
             let camera = camera_query.iter().next().unwrap().1;
@@ -478,21 +480,11 @@ fn apply_rotation(mut query: Query<(Forces, &Brain), With<Craber>>) {
 }
 
 /// System 2: Continuous perpendicular velocity damping (keel effect)
-fn apply_alignment() {
-}
+fn apply_alignment() {}
 
 /// System 3: Accumulator-gated kick impulse
 fn apply_kick(
-    mut query: Query<
-        (
-            Entity,
-            Forces,
-            &mut KickAccumulator,
-            &Transform,
-            &Brain,
-        ),
-        With<Craber>,
-    >,
+    mut query: Query<(Entity, Forces, &mut KickAccumulator, &Transform, &Brain), With<Craber>>,
     time: Res<Time>,
     mut lose_energy_events: MessageWriter<LoseEnergyEvent>,
 ) {

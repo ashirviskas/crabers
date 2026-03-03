@@ -1,8 +1,8 @@
 use avian2d::prelude::*;
 use bevy::prelude::*;
 
-use rand::prelude::IndexedRandom;
 use rand::RngExt;
+use rand::prelude::IndexedRandom;
 
 use crate::common::*;
 
