@@ -28,6 +28,10 @@ pub const CRABER_MUTATION_AMOUNT: f32 = 0.5;
 #[derive(Component)]
 pub struct KickAccumulator(pub f32);
 
+/// Accumulator for discrete angular impulses. Same pattern as KickAccumulator.
+#[derive(Component)]
+pub struct RotationAccumulator(pub f32);
+
 /// Accumulator for brain tick timing. Brain fires when this reaches >= 1.0.
 #[derive(Component)]
 pub struct BrainTickAccumulator(pub f32);
@@ -218,6 +222,7 @@ pub fn spawn_craber(
             .insert(AngularDamping(CRABER_ANGULAR_DAMPING))
             .insert(LinearDamping(crate::common::LINEAR_DAMPING_VALUE))
             .insert(KickAccumulator(0.0))
+            .insert(RotationAccumulator(0.0))
             .insert(BrainTickAccumulator(0.0))
             .insert(Name::new("Craber"))
             .insert((

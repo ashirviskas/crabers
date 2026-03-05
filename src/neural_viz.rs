@@ -230,6 +230,7 @@ fn neuron_label(neuron_type: NeuronType) -> &'static str {
         NeuronType::KickRate => "K.RT",
         NeuronType::AlignVelocity => "ALIGN",
         NeuronType::Rotate => "ROT",
+        NeuronType::RotateRate => "R.RT",
         NeuronType::ModifyBrainInterval => "M.INT",
         NeuronType::WantToMate => "MATE",
         NeuronType::WantToAttack => "ATK",

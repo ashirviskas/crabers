@@ -27,7 +27,8 @@ pub enum NeuronType {
     KickStrength,        // How hard each kick pushes (sigmoid, 0-1)
     KickRate,            // How often kicks fire (sigmoid, 0-1; 0=disabled, 1=max)
     AlignVelocity,       // How much velocity redirects toward facing (sigmoid, 0-1)
-    Rotate,              // Continuous angular torque (tanh, -1 to +1)
+    Rotate,              // Angular impulse direction (tanh, -1 to +1)
+    RotateRate,          // How often rotation impulses fire (ReLU, 0+)
     ModifyBrainInterval, // TODO
     WantToMate,
     WantToAttack,
@@ -62,6 +63,7 @@ impl NeuronType {
             NeuronType::KickRate,
             NeuronType::AlignVelocity,
             NeuronType::Rotate,
+            NeuronType::RotateRate,
             NeuronType::ModifyBrainInterval,
             NeuronType::WantToMate,
         ];
@@ -200,6 +202,11 @@ impl Brain {
                 activation_function: ActivationFunction::Sigmoid,
                 value: 0.0,
             },
+            Neuron {
+                neuron_type: NeuronType::RotateRate,
+                activation_function: ActivationFunction::ReLU,
+                value: 0.0,
+            },
         ];
         let hidden_layers = vec![Neuron {
             neuron_type: NeuronType::Hidden,
@@ -259,6 +266,14 @@ impl Brain {
             Connection {
                 from_id: 0,
                 to_id: 204,
+                weight: 0.5,
+                bias: 0.0,
+                enabled: true,
+            },
+            // AlwaysOn -> RotateRate
+            Connection {
+                from_id: 0,
+                to_id: 206,
                 weight: 0.5,
                 bias: 0.0,
                 enabled: true,
@@ -331,6 +346,14 @@ impl Brain {
     pub fn get_kick_strength(&self) -> f32 {
         for neuron in self.outputs.iter() {
             if neuron.neuron_type == NeuronType::KickStrength {
+                return neuron.value;
+            }
+        }
+        0.0
+    }
+    pub fn get_rotate_rate(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::RotateRate {
                 return neuron.value;
             }
         }

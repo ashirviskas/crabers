@@ -89,11 +89,15 @@ pub fn collides(a: &Transform, b: &Transform, collision_threshold: f32) -> bool 
 // Movement constants
 pub const MAX_IMPULSE: f32 = 600.0;
 pub const KICK_THRESHOLD: f32 = 0.01;
-pub const TORQUE_SCALE: f32 = 0.5;
 pub const LINEAR_DAMPING_VALUE: f32 = 2.0;
 pub const KICK_ENERGY_MODIFIER: f32 = 2.0;
 pub const KICK_STEEPNESS: f32 = 0.5;
 pub const KICK_RATE_STEEPNESS: f32 = 0.5;
+
+// Rotation constants
+pub const ROTATION_THRESHOLD: f32 = 0.01;
+pub const ROTATION_RATE_STEEPNESS: f32 = 0.5;
+pub const MAX_ANGULAR_IMPULSE: f32 = 0.1;
 
 // Brain tick constants
 pub const BRAIN_TICK_MIN_RATE: f32 = 1.0; // min ticks per second (Hz)

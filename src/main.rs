@@ -30,7 +30,7 @@ pub const MAX_FOOD_COUNT: usize = 10000;
 const WALL_THICKNESS: f32 = 60.0;
 const GRAVITY: f32 = 0.0;
 
-const VISION_UPDATE_RATE: f32 = 0.1;
+const VISION_UPDATE_RATE: f32 = 0.01;
 
 #[cfg(target_arch = "wasm32")]
 const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = true;
@@ -470,12 +470,25 @@ fn do_despawning(
     }
 }
 
-/// System 1: Continuous rotation via torque
-fn apply_rotation(mut query: Query<(Forces, &Brain), With<Craber>>) {
-    for (mut forces, brain) in query.iter_mut() {
-        let rotation = brain.get_rotation();
-        let torque = rotation * TORQUE_SCALE;
-        forces.apply_torque(torque);
+/// System 1: Accumulator-gated angular impulse rotation
+fn apply_rotation(
+    mut query: Query<(Forces, &mut RotationAccumulator, &Brain), With<Craber>>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (mut forces, mut accumulator, brain) in query.iter_mut() {
+        let rotation_direction = brain.get_rotation(); // [-1, 1] direction
+        let rotation_rate = brain.get_rotate_rate().max(0.0); // [0, ∞) rate
+        let effective_rate = 1.0 - (-rotation_rate * ROTATION_RATE_STEEPNESS).exp();
+
+        accumulator.0 += effective_rate * dt;
+        if accumulator.0 < ROTATION_THRESHOLD {
+            continue;
+        }
+        accumulator.0 = 0.0;
+
+        let angular_impulse = rotation_direction * effective_rate * MAX_ANGULAR_IMPULSE;
+        forces.apply_angular_impulse(angular_impulse);
     }
 }
 
