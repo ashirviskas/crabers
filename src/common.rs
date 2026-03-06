@@ -90,7 +90,7 @@ pub const KICK_RATE_STEEPNESS: f32 = 0.5;
 // Rotation constants
 pub const ROTATION_THRESHOLD: f32 = 0.01;
 pub const ROTATION_RATE_STEEPNESS: f32 = 0.5;
-pub const MAX_ANGULAR_IMPULSE: f32 = 0.1;
+pub const MAX_ANGULAR_IMPULSE: f32 = 0.03;
 
 // Brain tick constants
 pub const BRAIN_TICK_MIN_RATE: f32 = 1.0; // min ticks per second (Hz)

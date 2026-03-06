@@ -32,6 +32,9 @@ const GRAVITY: f32 = 0.0;
 
 const VISION_UPDATE_RATE: f32 = 0.01;
 
+#[derive(Resource, Default)]
+struct DebugVisionEnabled(bool);
+
 #[cfg(target_arch = "wasm32")]
 const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = true;
 
@@ -54,6 +57,7 @@ fn main() {
         .add_plugins(PhysicsPlugins::default())
         .insert_resource(SelectedEntity::default())
         .insert_resource(DebugInfo::default())
+        .insert_resource(DebugVisionEnabled::default())
         .add_message::<DespawnEvent>()
         .add_message::<SpawnEvent>()
         .add_message::<ReproduceEvent>()
@@ -89,6 +93,8 @@ fn main() {
         .add_systems(Update, despawn_dead_crabers.before(craber_despawner))
         .add_systems(Update, craber_despawner)
         .add_systems(Update, spawn_food)
+        .add_systems(Update, toggle_debug_vision)
+        .add_systems(Update, draw_vision_debug)
         .run();
 }
 
@@ -487,7 +493,7 @@ fn apply_rotation(
         }
         accumulator.0 = 0.0;
 
-        let angular_impulse = -rotation_direction * effective_rate * MAX_ANGULAR_IMPULSE;
+        let angular_impulse = rotation_direction * effective_rate * MAX_ANGULAR_IMPULSE;
         forces.apply_angular_impulse(angular_impulse);
     }
 }
@@ -527,13 +533,13 @@ fn apply_kick(
 }
 
 pub fn vision_update(
-    mut query: Query<(&mut Vision, &Transform, &Collider, &ChildOf)>,
+    mut query: Query<(&mut Vision, &GlobalTransform, &Collider, &ChildOf)>,
     mut vision_events: MessageReader<VisionEvent>,
 ) {
     for vision_event in vision_events.read() {
         match vision_event.event_type {
             VisionEventType::Food => {
-                if let Ok((mut vision, transform, _collider, _parent)) =
+                if let Ok((mut vision, global_transform, _collider, _parent)) =
                     query.get_mut(vision_event.vision_entity)
                 {
                     let manifolds = &vision_event.manifolds;
@@ -559,7 +565,7 @@ pub fn vision_update(
                     }
                     closest_point = -closest_point / min_distance;
                     vision.entities_in_vision.push(vision_event.entity);
-                    let vision_direction = transform.rotation.mul_vec3(Vec3::Y);
+                    let vision_direction = global_transform.rotation().mul_vec3(Vec3::Y);
                     let craber_direction = vision_direction;
                     vision.nearest_food_distance = min_distance;
                     vision.nearest_food_direction = angle_direction_between_vectors(
@@ -570,7 +576,7 @@ pub fn vision_update(
                 }
             }
             VisionEventType::Craber => {
-                if let Ok((mut vision, transform, _collider, _parent)) =
+                if let Ok((mut vision, global_transform, _collider, _parent)) =
                     query.get_mut(vision_event.vision_entity)
                 {
                     let manifolds = &vision_event.manifolds;
@@ -596,7 +602,7 @@ pub fn vision_update(
                     }
                     closest_point = -closest_point / min_distance;
                     vision.entities_in_vision.push(vision_event.entity);
-                    let vision_direction = transform.rotation.mul_vec3(Vec3::Y);
+                    let vision_direction = global_transform.rotation().mul_vec3(Vec3::Y);
                     let craber_direction = vision_direction;
                     vision.nearest_craber_distance = min_distance;
                     vision.nearest_craber_direction = angle_direction_between_vectors(
@@ -728,6 +734,51 @@ pub fn craber_attack_lose_health_add_energy(
             {
                 health.health -= craber_attack_event.attack_damage;
                 energy.energy += craber_attack_event.energy_to_gain;
+            }
+        }
+    }
+}
+
+fn toggle_debug_vision(keyboard: Res<ButtonInput<KeyCode>>, mut debug: ResMut<DebugVisionEnabled>) {
+    if keyboard.just_pressed(KeyCode::KeyP) {
+        debug.0 = !debug.0;
+    }
+}
+
+fn draw_vision_debug(
+    debug: Res<DebugVisionEnabled>,
+    mut gizmos: Gizmos,
+    craber_query: Query<(&Transform, &Children), With<Craber>>,
+    vision_query: Query<&Vision>,
+) {
+    if !debug.0 {
+        return;
+    }
+    for (transform, children) in craber_query.iter() {
+        let pos = transform.translation.truncate();
+        let facing = (transform.rotation * Vec3::NEG_Y).truncate().normalize();
+
+        // White: facing direction
+        gizmos.line_2d(pos, pos + facing * 50.0, Color::WHITE);
+
+        for child in children.iter() {
+            if let Ok(vision) = vision_query.get(child) {
+                if vision.see_food {
+                    let angle = vision.nearest_food_direction.clamp(-1.0, 1.0).asin();
+                    let food_dir = Vec2::new(
+                        facing.x * angle.cos() - facing.y * angle.sin(),
+                        facing.x * angle.sin() + facing.y * angle.cos(),
+                    );
+                    gizmos.line_2d(pos, pos + food_dir * 40.0, Color::srgb(0.0, 1.0, 0.0));
+                }
+                if vision.see_craber {
+                    let angle = vision.nearest_craber_direction.clamp(-1.0, 1.0).asin();
+                    let craber_dir = Vec2::new(
+                        facing.x * angle.cos() - facing.y * angle.sin(),
+                        facing.x * angle.sin() + facing.y * angle.cos(),
+                    );
+                    gizmos.line_2d(pos, pos + craber_dir * 40.0, Color::srgb(1.0, 0.0, 0.0));
+                }
             }
         }
     }
