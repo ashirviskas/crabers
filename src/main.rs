@@ -4,6 +4,7 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
+use bevy_egui::{EguiPlugin, EguiContexts, egui};
 
 mod craber;
 use craber::*;
@@ -15,7 +16,6 @@ mod food;
 use food::*;
 
 mod neural_viz;
-use neural_viz::*;
 
 mod common;
 use bevy_pancam::{PanCam, PanCamPlugin};
@@ -48,12 +48,12 @@ fn main() {
             ..default()
         }))
         .add_plugins(PanCamPlugin)
+        .add_plugins(EguiPlugin::default())
         .add_plugins(LogDiagnosticsPlugin::default())
         .add_plugins(FrameTimeDiagnosticsPlugin::default())
         .add_plugins(PhysicsPlugins::default())
         .insert_resource(SelectedEntity::default())
         .insert_resource(DebugInfo::default())
-        .insert_resource(NeuralNetworkLayout::default())
         .add_message::<DespawnEvent>()
         .add_message::<SpawnEvent>()
         .add_message::<ReproduceEvent>()
@@ -65,15 +65,10 @@ fn main() {
         .add_message::<CraberDespawnEvent>()
         .add_message::<FoodSpawnEvent>()
         .add_systems(Startup, setup)
-        .add_systems(Startup, setup_ui)
-        .add_systems(Startup, setup_neural_panel)
         .add_systems(Update, entity_selection)
         .add_systems(Update, update_selected_entity_info)
-        .add_systems(Update, update_ui)
-        .add_systems(Update, update_nn_layout)
-        .add_systems(Update, spawn_neuron_nodes)
-        .add_systems(Update, update_neuron_display)
         .add_systems(Update, update_debug_info)
+        .add_systems(Update, egui_ui)
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
         .add_systems(Update, do_collision)
@@ -173,77 +168,74 @@ fn setup(mut commands: Commands) {
         .insert(Collider::rectangle(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
 
-/// Marker component for the main status/debug text UI
-#[derive(Component)]
-struct StatusText;
-
-/// Marker for the debug info text span (child of StatusText)
-#[derive(Component)]
-struct DebugTextSpan;
-
-fn setup_ui(mut commands: Commands, _asset_server: Res<AssetServer>) {
-    commands
-        .spawn((
-            Text::new("No craber selected"),
-            TextFont {
-                font_size: 30.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
-            StatusText,
-        ))
-        .with_child((
-            Text::new("\nEntities: 0\nFps: 0.0"),
-            TextFont {
-                font_size: 30.0,
-                ..default()
-            },
-            TextColor(Color::WHITE),
-            DebugTextSpan,
-        ));
-}
-
-fn update_ui(selected: Res<SelectedEntity>, mut query: Query<&mut Text, With<StatusText>>) {
-    for mut text in query.iter_mut() {
-        if let Some(_) = selected.entity {
-            text.0 = format!(
-                "Health: {:.2}, Energy: {:.2}\nGeneration: {}\nNearest food angle: {}",
-                selected.health, selected.energy, selected.generation, selected.nearest_food_anlge
-            );
-        } else {
-            text.0 = "No craber selected".to_string();
-        }
-    }
-}
-
 fn update_debug_info(
     mut debug_info: ResMut<DebugInfo>,
     craber_query: Query<&Craber>,
     food_query: Query<&Food>,
     diagnostics: Res<DiagnosticsStore>,
-    _time: Res<Time>,
-    mut query: Query<&mut Text, With<DebugTextSpan>>,
 ) {
-    debug_info.entity_count = craber_query.iter().count() + food_query.iter().count();
-    let fps = diagnostics
+    debug_info.craber_count = craber_query.iter().count();
+    debug_info.food_count = food_query.iter().count();
+    debug_info.entity_count = debug_info.craber_count + debug_info.food_count;
+    if let Some(fps) = diagnostics
         .get(&FrameTimeDiagnosticsPlugin::FPS)
-        .and_then(|x| x.average());
-
-    if let Some(fps) = fps {
+        .and_then(|x| x.average())
+    {
         debug_info.fps = fps;
-    } else {
-        debug_info.fps = 0.0;
+    }
+}
+
+fn egui_ui(
+    mut contexts: EguiContexts,
+    selected: Res<SelectedEntity>,
+    debug_info: Res<DebugInfo>,
+    brain_query: Query<&Brain>,
+    mut initialized: Local<bool>,
+) {
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+
+    // Skip until egui has run its first pass and initialized fonts
+    if !*initialized {
+        *initialized = true;
         return;
     }
 
-    for mut text in query.iter_mut() {
-        text.0 = format!(
-            "\n Craber count: {}, \n Food count: {}, Total: {}, \n FPS: {:.2}",
-            craber_query.iter().count(),
-            food_query.iter().count(),
-            debug_info.entity_count,
-            debug_info.fps
-        );
+    // Left panel: inspector + debug info
+    egui::SidePanel::left("inspector")
+        .default_width(220.0)
+        .resizable(false)
+        .show(ctx, |ui| {
+            ui.heading("Inspector");
+            ui.separator();
+
+            if let Some(_entity) = selected.entity {
+                ui.label(format!("Health: {:.2}", selected.health));
+                ui.label(format!("Energy: {:.2}", selected.energy));
+                ui.label(format!("Generation: {}", selected.generation));
+                ui.label(format!("Nearest food angle: {:.2}", selected.nearest_food_anlge));
+            } else {
+                ui.label("No craber selected");
+            }
+
+            ui.separator();
+            ui.label(format!("Crabers: {}", debug_info.craber_count));
+            ui.label(format!("Food: {}", debug_info.food_count));
+            ui.label(format!("Total: {}", debug_info.entity_count));
+            ui.label(format!("FPS: {:.1}", debug_info.fps));
+        });
+
+    // Right panel: neural network (only when a craber is selected)
+    if let Some(entity) = selected.entity {
+        if let Ok(brain) = brain_query.get(entity) {
+            egui::SidePanel::right("neural_network")
+                .default_width(440.0)
+                .resizable(false)
+                .show(ctx, |ui| {
+                    ui.heading("Neural Network");
+                    ui.separator();
+                    neural_viz::draw_neural_network(ui, brain);
+                });
+        }
     }
 }
 

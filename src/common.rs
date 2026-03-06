@@ -66,19 +66,12 @@ pub struct SelectedEntity {
     pub brain_info: String,
 }
 
-#[derive(Resource)]
+#[derive(Resource, Default)]
 pub struct DebugInfo {
     pub fps: f64,
     pub entity_count: usize,
-}
-
-impl Default for DebugInfo {
-    fn default() -> Self {
-        DebugInfo {
-            fps: 0.0,
-            entity_count: 0,
-        }
-    }
+    pub craber_count: usize,
+    pub food_count: usize,
 }
 
 pub fn collides(a: &Transform, b: &Transform, collision_threshold: f32) -> bool {
