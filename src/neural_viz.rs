@@ -7,7 +7,7 @@ const PANEL_WIDTH: f32 = 420.0;
 const NEURON_RADIUS: f32 = 14.0;
 const COLUMN_X: [f32; 3] = [60.0, 200.0, 340.0];
 const ROW_START_Y: f32 = 60.0;
-const ROW_SPACING: f32 = 50.0;
+const ROW_SPACING: f32 = 65.0;
 
 /// Neuron layer enum for position calculation
 #[derive(Clone, Copy, Debug, PartialEq)]

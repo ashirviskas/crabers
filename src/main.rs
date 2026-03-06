@@ -4,7 +4,7 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
-use bevy_egui::{EguiPlugin, EguiContexts, egui};
+use bevy_egui::{EguiContexts, EguiPlugin, egui};
 
 mod craber;
 use craber::*;
@@ -200,19 +200,26 @@ fn egui_ui(
         return;
     }
 
-    // Left panel: inspector + debug info
-    egui::SidePanel::left("inspector")
-        .default_width(220.0)
-        .resizable(false)
-        .show(ctx, |ui| {
-            ui.heading("Inspector");
-            ui.separator();
+    let transparent_frame = egui::Frame::new()
+        .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 25, 200))
+        .corner_radius(6.0)
+        .inner_margin(10.0);
 
+    // Left window: inspector + debug info
+    egui::Window::new("Inspector")
+        .default_pos([10.0, 10.0])
+        .resizable(false)
+        .collapsible(true)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
             if let Some(_entity) = selected.entity {
                 ui.label(format!("Health: {:.2}", selected.health));
                 ui.label(format!("Energy: {:.2}", selected.energy));
                 ui.label(format!("Generation: {}", selected.generation));
-                ui.label(format!("Nearest food angle: {:.2}", selected.nearest_food_anlge));
+                ui.label(format!(
+                    "Nearest food angle: {:.2}",
+                    selected.nearest_food_anlge
+                ));
             } else {
                 ui.label("No craber selected");
             }
@@ -230,6 +237,7 @@ fn egui_ui(
             egui::SidePanel::right("neural_network")
                 .default_width(440.0)
                 .resizable(false)
+                .frame(transparent_frame)
                 .show(ctx, |ui| {
                     ui.heading("Neural Network");
                     ui.separator();
@@ -479,7 +487,7 @@ fn apply_rotation(
         }
         accumulator.0 = 0.0;
 
-        let angular_impulse = rotation_direction * effective_rate * MAX_ANGULAR_IMPULSE;
+        let angular_impulse = -rotation_direction * effective_rate * MAX_ANGULAR_IMPULSE;
         forces.apply_angular_impulse(angular_impulse);
     }
 }
