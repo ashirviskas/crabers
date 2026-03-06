@@ -14,7 +14,6 @@ const CRABER_HEALING_COST: f32 = 1.3;
 const CRABER_DEATH_ENERGY_FACTOR: f32 = 0.7;
 const CRABER_MASS: f32 = 0.5;
 const CRABER_INERTIA: f32 = 0.05;
-const CRABER_ANGULAR_DAMPING: f32 = 1.95;
 pub const CRABER_SIZE: f32 = 10.0;
 pub const CRABER_REQUIRED_REPRODUCE_ENERGY: f32 = 100.0;
 pub const CRABER_REPRODUCE_ENERGY: f32 = 60.0;
@@ -219,8 +218,8 @@ pub fn spawn_craber(
             .insert(Mass(CRABER_MASS))
             .insert(AngularInertia(CRABER_INERTIA))
             .insert(Restitution::new(0.8))
-            .insert(AngularDamping(CRABER_ANGULAR_DAMPING))
-            .insert(LinearDamping(crate::common::LINEAR_DAMPING_VALUE))
+            .insert(AngularDamping(0.0))
+            .insert(LinearDamping(0.0))
             .insert(KickAccumulator(0.0))
             .insert(RotationAccumulator(0.0))
             .insert(BrainTickAccumulator(0.0))

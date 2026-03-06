@@ -79,7 +79,7 @@ fn main() {
         .add_systems(Update, do_craber_collision)
         .add_systems(Update, vision_update)
         .add_systems(Update, apply_rotation)
-        .add_systems(Update, apply_alignment)
+        .add_systems(Update, apply_water_drag)
         .add_systems(Update, apply_kick)
         .add_systems(Update, brain_update)
         .add_systems(Update, craber_lose_energy)
@@ -498,8 +498,26 @@ fn apply_rotation(
     }
 }
 
-/// System 2: Continuous perpendicular velocity damping (keel effect)
-fn apply_alignment() {}
+/// System 2: Quadratic water drag — force scales with v², giving natural underwater movement
+fn apply_water_drag(mut query: Query<Forces, With<Craber>>) {
+    for mut forces in query.iter_mut() {
+        // Quadratic linear drag: F = -c * |v| * v
+        let vel = forces.linear_velocity();
+        let speed = vel.length();
+        if speed > 0.0 {
+            let drag = -LINEAR_DRAG_COEFFICIENT * speed * vel;
+            forces.apply_force(drag);
+        }
+
+        // Quadratic angular drag: τ = -c * |ω| * ω
+        let ang_vel = forces.angular_velocity();
+        let ang_speed = ang_vel.abs();
+        if ang_speed > 0.0 {
+            let torque = -ANGULAR_DRAG_COEFFICIENT * ang_speed * ang_vel;
+            forces.apply_torque(torque);
+        }
+    }
+}
 
 /// System 3: Accumulator-gated kick impulse
 fn apply_kick(
@@ -748,18 +766,24 @@ fn toggle_debug_vision(keyboard: Res<ButtonInput<KeyCode>>, mut debug: ResMut<De
 fn draw_vision_debug(
     debug: Res<DebugVisionEnabled>,
     mut gizmos: Gizmos,
-    craber_query: Query<(&Transform, &Children), With<Craber>>,
+    craber_query: Query<(&Transform, &Children, &LinearVelocity), With<Craber>>,
     vision_query: Query<&Vision>,
 ) {
     if !debug.0 {
         return;
     }
-    for (transform, children) in craber_query.iter() {
+    for (transform, children, linear_vel) in craber_query.iter() {
         let pos = transform.translation.truncate();
         let facing = (transform.rotation * Vec3::NEG_Y).truncate().normalize();
 
         // White: facing direction
         gizmos.line_2d(pos, pos + facing * 50.0, Color::WHITE);
+
+        // Cyan: velocity indicator
+        let vel = linear_vel.0;
+        if vel.length() > 0.1 {
+            gizmos.line_2d(pos, pos + vel * 0.3, Color::srgb(0.0, 1.0, 1.0));
+        }
 
         for child in children.iter() {
             if let Ok(vision) = vision_query.get(child) {

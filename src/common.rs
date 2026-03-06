@@ -82,8 +82,11 @@ pub fn collides(a: &Transform, b: &Transform, collision_threshold: f32) -> bool 
 // Movement constants
 pub const MAX_IMPULSE: f32 = 200.0;
 pub const KICK_THRESHOLD: f32 = 0.01;
-pub const LINEAR_DAMPING_VALUE: f32 = 2.0;
 pub const KICK_ENERGY_MODIFIER: f32 = 2.0;
+
+// Quadratic water drag constants
+pub const LINEAR_DRAG_COEFFICIENT: f32 = 0.01;
+pub const ANGULAR_DRAG_COEFFICIENT: f32 = 3.0;
 pub const KICK_STEEPNESS: f32 = 0.5;
 pub const KICK_RATE_STEEPNESS: f32 = 0.5;
 
