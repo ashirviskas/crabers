@@ -95,6 +95,8 @@ Building a WASM build:
 - [x] Sexual reproduction
   - [x] Brain modifications (crossover, WantToReproduce/WantSexualReproduction neurons)
   - [x] Reproduction modifications (neural-gated asexual/sexual modes)
+  - [ ] Allow to prefer sexual reproduction, but also reproduce asexually if for example repr > sex.
+  - [ ] Allow to not reproduce but want to provide genetic material by sex > above threshold, repr < below threshold.
 - [x] Simple evolution/mutation system
   - [x] Brain mutations
   - [ ] Other craber qualities mutations

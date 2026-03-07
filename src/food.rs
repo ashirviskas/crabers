@@ -19,7 +19,8 @@ pub fn food_spawner(
     mut food_spawn_event: MessageWriter<FoodSpawnEvent>,
     food_query: Query<&Food>,
 ) {
-    if timer.0.tick(time.delta()).just_finished() {
+    let times = timer.0.tick(time.delta()).times_finished_this_tick();
+    for _ in 0..times {
         if food_query.iter().count() >= crate::MAX_FOOD_COUNT {
             return;
         }

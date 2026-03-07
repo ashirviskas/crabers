@@ -7,8 +7,9 @@ edition = "2024"
 
 [dependencies]
 bevy = { version = "0.18", default-features = false, features = ["2d"] }
-bevy_pancam = "0.20"
+bevy_pancam = { version = "0.20", features = ["bevy_egui_0_39"] }
 bevy_egui = "0.39"
+egui_plot = "0.34"
 rand = "0.10"
 avian2d = "0.5"
 

@@ -4,7 +4,9 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
-use bevy_egui::{EguiContexts, EguiPlugin, egui};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use egui_plot::{Line, Plot, PlotPoints};
+use std::collections::VecDeque;
 
 mod craber;
 use craber::*;
@@ -35,6 +37,9 @@ const VISION_UPDATE_RATE: f32 = 0.01;
 #[derive(Resource, Default)]
 struct DebugVisionEnabled(bool);
 
+#[derive(Component)]
+struct SelectionRing;
+
 #[cfg(target_arch = "wasm32")]
 const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = true;
 
@@ -58,6 +63,7 @@ fn main() {
         .add_plugins(PhysicsPlugins::default())
         .insert_resource(SelectedEntity::default())
         .insert_resource(DebugInfo::default())
+        .insert_resource(SimulationStats::new(600))
         .insert_resource(DebugVisionEnabled::default())
         .add_message::<DespawnEvent>()
         .add_message::<SpawnEvent>()
@@ -73,9 +79,12 @@ fn main() {
         .add_message::<FoodSpawnEvent>()
         .add_systems(Startup, setup)
         .add_systems(Update, entity_selection)
+        .add_systems(Update, highlight_selected_entity.after(entity_selection))
         .add_systems(Update, update_selected_entity_info)
         .add_systems(Update, update_debug_info)
-        .add_systems(Update, egui_ui)
+        .add_systems(EguiPrimaryContextPass, egui_ui)
+        .add_systems(Update, record_simulation_stats.after(update_debug_info))
+        .add_systems(EguiPrimaryContextPass, egui_charts.after(egui_ui))
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
         .add_systems(Update, do_collision)
@@ -201,6 +210,184 @@ fn update_debug_info(
     }
 }
 
+fn record_simulation_stats(
+    time: Res<Time>,
+    debug_info: Res<DebugInfo>,
+    mut stats: ResMut<SimulationStats>,
+    craber_query: Query<(&CraberAge, &Generation, &Energy, &Health), With<Craber>>,
+    brain_query: Query<&Brain, With<Craber>>,
+) {
+    stats.sample_timer.tick(time.delta());
+    if stats.sample_timer.just_finished() {
+        let elapsed = time.elapsed_secs_f64();
+        let cap = stats.capacity;
+
+        push_sample(&mut stats.craber_history, cap, elapsed, debug_info.craber_count as f64);
+        push_sample(&mut stats.food_history, cap, elapsed, debug_info.food_count as f64);
+
+        // Compute craber metrics
+        let mut total_age = 0.0_f64;
+        let mut max_age = 0.0_f64;
+        let mut total_gen = 0.0_f64;
+        let mut max_gen = 0.0_f64;
+        let mut total_energy = 0.0_f64;
+        let mut total_health = 0.0_f64;
+        let mut count = 0_u32;
+
+        for (age, generation, energy, health) in craber_query.iter() {
+            let a = age.0 as f64;
+            let g = generation.generation_id as f64;
+            total_age += a;
+            if a > max_age { max_age = a; }
+            total_gen += g;
+            if g > max_gen { max_gen = g; }
+            total_energy += energy.energy as f64;
+            total_health += health.health as f64;
+            count += 1;
+        }
+
+        let divisor = count.max(1) as f64;
+        push_sample(&mut stats.avg_age_history, cap, elapsed, total_age / divisor);
+        push_sample(&mut stats.max_age_history, cap, elapsed, max_age);
+        push_sample(&mut stats.avg_generation_history, cap, elapsed, total_gen / divisor);
+        push_sample(&mut stats.max_generation_history, cap, elapsed, max_gen);
+        push_sample(&mut stats.avg_energy_history, cap, elapsed, total_energy / divisor);
+        push_sample(&mut stats.avg_health_history, cap, elapsed, total_health / divisor);
+
+        // Brain complexity
+        let mut total_hidden = 0_u64;
+        let mut total_connections = 0_u64;
+        let mut brain_count = 0_u32;
+        for brain in brain_query.iter() {
+            total_hidden += brain.hidden_layers.len() as u64;
+            total_connections += brain.connections.len() as u64;
+            brain_count += 1;
+        }
+        let brain_divisor = brain_count.max(1) as f64;
+        push_sample(&mut stats.avg_hidden_neurons_history, cap, elapsed, total_hidden as f64 / brain_divisor);
+        push_sample(&mut stats.avg_connections_history, cap, elapsed, total_connections as f64 / brain_divisor);
+
+        // Birth/death rates (counts since last sample)
+        let births = stats.birth_counter as f64;
+        let deaths = stats.death_counter as f64;
+        push_sample(&mut stats.birth_rate_history, cap, elapsed, births);
+        push_sample(&mut stats.death_rate_history, cap, elapsed, deaths);
+        stats.birth_counter = 0;
+        stats.death_counter = 0;
+    }
+}
+
+fn plot_lines(ui: &mut egui::Ui, plot_id: &str, lines: &[(&str, &VecDeque<[f64; 2]>)]) {
+    Plot::new(plot_id)
+        .view_aspect(2.0)
+        .label_formatter(|name, value| {
+            if name.is_empty() {
+                format!("t = {:.1}s\n{:.1}", value.x, value.y)
+            } else {
+                format!("{name}\nt = {:.1}s\n{:.1}", value.x, value.y)
+            }
+        })
+        .show(ui, |plot_ui| {
+            for (name, data) in lines {
+                let points: PlotPoints = PlotPoints::new(data.iter().copied().collect());
+                plot_ui.line(Line::new(*name, points));
+            }
+        });
+}
+
+fn egui_charts(
+    mut contexts: EguiContexts,
+    stats: Res<SimulationStats>,
+    mut initialized: Local<bool>,
+) {
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+
+    if !*initialized {
+        *initialized = true;
+        return;
+    }
+
+    let transparent_frame = egui::Frame::new()
+        .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 25, 200))
+        .corner_radius(6.0)
+        .inner_margin(10.0);
+
+    // Population window
+    egui::Window::new("Population")
+        .default_pos([10.0, 350.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(true)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            ui.label("Crabers");
+            plot_lines(ui, "craber_population", &[("Crabers", &stats.craber_history)]);
+            ui.separator();
+            ui.label("Food");
+            plot_lines(ui, "food_population", &[("Food", &stats.food_history)]);
+        });
+
+    // Vitals window
+    egui::Window::new("Vitals")
+        .default_pos([10.0, 560.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(false)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            plot_lines(ui, "vitals", &[
+                ("Avg Energy", &stats.avg_energy_history),
+                ("Avg Health", &stats.avg_health_history),
+            ]);
+        });
+
+    // Demographics window
+    egui::Window::new("Demographics")
+        .default_pos([10.0, 585.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(false)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            ui.label("Age");
+            plot_lines(ui, "age", &[
+                ("Avg Age", &stats.avg_age_history),
+                ("Max Age", &stats.max_age_history),
+            ]);
+            ui.separator();
+            ui.label("Generation");
+            plot_lines(ui, "generation", &[
+                ("Avg Generation", &stats.avg_generation_history),
+                ("Max Generation", &stats.max_generation_history),
+            ]);
+        });
+
+    // Complexity & Rates window
+    egui::Window::new("Complexity & Rates")
+        .default_pos([10.0, 610.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(false)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            ui.label("Brain Complexity");
+            plot_lines(ui, "brain_complexity", &[
+                ("Avg Hidden Neurons", &stats.avg_hidden_neurons_history),
+                ("Avg Connections", &stats.avg_connections_history),
+            ]);
+            ui.separator();
+            ui.label("Birth / Death Rate");
+            plot_lines(ui, "birth_death_rate", &[
+                ("Births", &stats.birth_rate_history),
+                ("Deaths", &stats.death_rate_history),
+            ]);
+        });
+}
+
 fn egui_ui(
     mut contexts: EguiContexts,
     selected: Res<SelectedEntity>,
@@ -303,6 +490,38 @@ fn entity_selection(
             }
         }
     }
+}
+
+fn highlight_selected_entity(
+    mut commands: Commands,
+    selected: Res<SelectedEntity>,
+    mut prev_selected: Local<Option<Entity>>,
+    ring_query: Query<Entity, With<SelectionRing>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    if selected.entity == *prev_selected {
+        return;
+    }
+    // Despawn old ring(s)
+    for ring in ring_query.iter() {
+        commands.entity(ring).despawn();
+    }
+    // Spawn new ring as child of selected entity
+    if let Some(entity) = selected.entity {
+        let ring = commands
+            .spawn((
+                Mesh2d(meshes.add(Circle::new(CRABER_SIZE))),
+                MeshMaterial2d(materials.add(ColorMaterial::from(
+                    Color::srgba(1.0, 1.0, 0.0, 0.35),
+                ))),
+                Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
+                SelectionRing,
+            ))
+            .id();
+        commands.entity(entity).add_child(ring);
+    }
+    *prev_selected = selected.entity;
 }
 
 fn window_to_world(
@@ -766,6 +985,7 @@ pub fn brain_update(
             BRAIN_TICK_MIN_RATE + modify_output * (BRAIN_TICK_MAX_RATE - BRAIN_TICK_MIN_RATE);
 
         accumulator.0 += effective_rate * dt;
+        age.0 += dt; // Track real elapsed time, independent of brain tick rate
         if accumulator.0 < 1.0 {
             continue;
         }
@@ -831,9 +1051,6 @@ pub fn brain_update(
                 brain.update_input(NeuronType::NearestWallDistance, 0.0);
             }
         }
-        // Tick age
-        age.0 += dt;
-
         // Feed health/energy/age inputs (normalized 0-1)
         brain.update_input(NeuronType::CraberHealth, health.health / health.max_health);
         brain.update_input(NeuronType::CraberEnergy, energy.energy / energy.max_energy);
