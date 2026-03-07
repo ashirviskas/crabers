@@ -46,7 +46,7 @@ Building a WASM build:
 - **Genetic Traits:** Each craber has DNA defining basic characteristics like color, size, and maturity factors.
 - **Physics-Based Movement:** Crabers can move forward/backward and strafe left/right in a fluid medium with drag. They can also turn or steer.
 - **Sensory Inputs:** Include relative speed, angle to nearest food, angle to nearest organism, genetic closeness, pheromone sense, current energy level, and health.
-- **Reproduction:** Crabers reproduce asexually upon reaching maturity and having sufficient energy. Offspring may have mutations.
+- **Reproduction:** Crabers reproduce asexually or sexually depending on their brain's `want_sex` output. When `want_sex >= 0.5`, the craber attempts sexual reproduction by finding a willing mate in its vision range. If no mate is found, there is a probabilistic fallback to asexual reproduction — the closer `want_sex` is to 1.0, the less likely the fallback (`fallback_chance = (1.0 - want_sex) / 0.5`). At `want_sex >= 1.0` there is no fallback at all. Below 0.5, the craber reproduces asexually. Sexual offspring inherit a crossover of both parents' brains; asexual offspring are mutated clones.
 - **Food Sources:** Random blobs of "food" spawn in the environment.
 - **Pheromone System:** An experimental feature for inter-craber communication and interaction.
 - **Horizontal Gene Transfer:** Crabers can transfer genetic information to other crabers through a "gene transfer" action that might happen if both parties are willing and bump into each other [TBD].
@@ -95,7 +95,8 @@ Building a WASM build:
 - [x] Sexual reproduction
   - [x] Brain modifications (crossover, WantToReproduce/WantSexualReproduction neurons)
   - [x] Reproduction modifications (neural-gated asexual/sexual modes)
-  - [ ] Allow to prefer sexual reproduction, but also reproduce asexually if for example repr > sex.
+  - [x] Probabilistic asexual fallback when no mate found (chance decreases as `want_sex` approaches 1.0)
+  - [x] Separate sexual vs asexual birth rate charts
   - [ ] Allow to not reproduce but want to provide genetic material by sex > above threshold, repr < below threshold.
 - [x] Simple evolution/mutation system
   - [x] Brain mutations
