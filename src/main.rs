@@ -4,7 +4,8 @@ use bevy::{
     prelude::*,
     time::{Timer, TimerMode},
 };
-use bevy_egui::{EguiContexts, EguiPlugin, egui};
+use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
+use egui_plot::{Line, Plot, PlotPoints};
 
 mod craber;
 use craber::*;
@@ -58,6 +59,7 @@ fn main() {
         .add_plugins(PhysicsPlugins::default())
         .insert_resource(SelectedEntity::default())
         .insert_resource(DebugInfo::default())
+        .insert_resource(SimulationStats::new(600))
         .insert_resource(DebugVisionEnabled::default())
         .add_message::<DespawnEvent>()
         .add_message::<SpawnEvent>()
@@ -75,7 +77,9 @@ fn main() {
         .add_systems(Update, entity_selection)
         .add_systems(Update, update_selected_entity_info)
         .add_systems(Update, update_debug_info)
-        .add_systems(Update, egui_ui)
+        .add_systems(EguiPrimaryContextPass, egui_ui)
+        .add_systems(Update, record_simulation_stats.after(update_debug_info))
+        .add_systems(EguiPrimaryContextPass, egui_charts.after(egui_ui))
         .add_systems(Update, food_spawner)
         .add_systems(Update, craber_spawner)
         .add_systems(Update, do_collision)
@@ -199,6 +203,61 @@ fn update_debug_info(
     {
         debug_info.fps = fps;
     }
+}
+
+fn record_simulation_stats(
+    time: Res<Time>,
+    debug_info: Res<DebugInfo>,
+    mut stats: ResMut<SimulationStats>,
+) {
+    stats.sample_timer.tick(time.delta());
+    if stats.sample_timer.just_finished() {
+        let elapsed = time.elapsed_secs_f64();
+        stats.record(elapsed, debug_info.craber_count as f64);
+    }
+}
+
+fn egui_charts(
+    mut contexts: EguiContexts,
+    stats: Res<SimulationStats>,
+    mut initialized: Local<bool>,
+) {
+    let Ok(ctx) = contexts.ctx_mut() else { return };
+
+    if !*initialized {
+        *initialized = true;
+        return;
+    }
+
+    let transparent_frame = egui::Frame::new()
+        .fill(egui::Color32::from_rgba_unmultiplied(20, 20, 25, 200))
+        .corner_radius(6.0)
+        .inner_margin(10.0);
+
+    egui::Window::new("Population")
+        .default_pos([10.0, 350.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            let points: PlotPoints = PlotPoints::new(stats.craber_history.iter().copied().collect());
+            let line = Line::new("Crabers", points);
+            Plot::new("craber_population")
+                .view_aspect(2.0)
+                .x_axis_label("Time (s)")
+                .y_axis_label("Count")
+                .label_formatter(|name, value| {
+                    if name.is_empty() {
+                        format!("t = {:.1}s\ncount = {:.0}", value.x, value.y)
+                    } else {
+                        format!("{name}\nt = {:.1}s\ncount = {:.0}", value.x, value.y)
+                    }
+                })
+                .show(ui, |plot_ui| {
+                    plot_ui.line(line);
+                });
+        });
 }
 
 fn egui_ui(

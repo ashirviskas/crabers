@@ -1,4 +1,5 @@
 use bevy::prelude::*;
+use std::collections::VecDeque;
 use std::f32::consts::PI;
 
 use avian2d::prelude::*;
@@ -74,6 +75,30 @@ pub struct DebugInfo {
     pub entity_count: usize,
     pub craber_count: usize,
     pub food_count: usize,
+}
+
+#[derive(Resource)]
+pub struct SimulationStats {
+    pub craber_history: VecDeque<[f64; 2]>,
+    pub sample_timer: Timer,
+    capacity: usize,
+}
+
+impl SimulationStats {
+    pub fn new(capacity: usize) -> Self {
+        Self {
+            craber_history: VecDeque::with_capacity(capacity),
+            sample_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
+            capacity,
+        }
+    }
+
+    pub fn record(&mut self, time: f64, count: f64) {
+        if self.craber_history.len() >= self.capacity {
+            self.craber_history.pop_front();
+        }
+        self.craber_history.push_back([time, count]);
+    }
 }
 
 pub fn collides(a: &Transform, b: &Transform, collision_threshold: f32) -> bool {
