@@ -134,7 +134,8 @@ fn setup(mut commands: Commands) {
             },
             Transform::from_translation(Vec3::new(0.0, WORLD_SIZE, 0.0)),
         ))
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber, Layer::Vision]))
+        .insert(EntityType::Wall)
         .insert(RigidBody::Static)
         .insert(Collider::rectangle(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
 
@@ -147,7 +148,8 @@ fn setup(mut commands: Commands) {
             },
             Transform::from_translation(Vec3::new(0.0, -WORLD_SIZE, 0.0)),
         ))
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber, Layer::Vision]))
+        .insert(EntityType::Wall)
         .insert(RigidBody::Static)
         .insert(Collider::rectangle(WORLD_SIZE * 2.0, WALL_THICKNESS / 2.0));
     commands
@@ -159,7 +161,8 @@ fn setup(mut commands: Commands) {
             },
             Transform::from_translation(Vec3::new(WORLD_SIZE, 0.0, 0.0)),
         ))
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber, Layer::Vision]))
+        .insert(EntityType::Wall)
         .insert(RigidBody::Static)
         .insert(Collider::rectangle(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
     commands
@@ -171,7 +174,8 @@ fn setup(mut commands: Commands) {
             },
             Transform::from_translation(Vec3::new(-WORLD_SIZE, 0.0, 0.0)),
         ))
-        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber]))
+        .insert(CollisionLayers::new([Layer::Wall], [Layer::Craber, Layer::Vision]))
+        .insert(EntityType::Wall)
         .insert(RigidBody::Static)
         .insert(Collider::rectangle(WALL_THICKNESS / 2.0, WORLD_SIZE * 2.0));
 }
@@ -422,6 +426,24 @@ fn do_collision(
                             manifolds: manifolds.clone(),
                         });
                     }
+                    (EntityType::Wall, EntityType::Vision) => {
+                        vision_events.write(VisionEvent {
+                            vision_entity: entity2,
+                            entity: entity1,
+                            event_type: VisionEventType::Wall,
+                            entity_id: 2,
+                            manifolds: manifolds.clone(),
+                        });
+                    }
+                    (EntityType::Vision, EntityType::Wall) => {
+                        vision_events.write(VisionEvent {
+                            vision_entity: entity1,
+                            entity: entity2,
+                            event_type: VisionEventType::Wall,
+                            entity_id: 1,
+                            manifolds: manifolds.clone(),
+                        });
+                    }
                     _ => {}
                 }
             }
@@ -495,7 +517,7 @@ fn apply_rotation(
         if accumulator.0 < ROTATION_THRESHOLD {
             continue;
         }
-        accumulator.0 = 0.0;
+        accumulator.0 -= ROTATION_THRESHOLD;
 
         let angular_impulse = rotation_direction * effective_rate * MAX_ANGULAR_IMPULSE;
         if angular_impulse.is_finite() {
@@ -518,14 +540,14 @@ fn apply_water_drag(
         let speed = lin_vel.0.length();
         if speed > 0.0 && speed.is_finite() {
             // Quadratic feel: faster speeds get damped more aggressively
-            let damp_factor = (1.0 - LINEAR_DRAG_COEFFICIENT * speed * dt).clamp(0.0, 1.0);
+            let damp_factor = (-LINEAR_DRAG_COEFFICIENT * speed * dt).exp();
             lin_vel.0 *= damp_factor;
         }
 
         // Angular drag: damp angular velocity directly each frame
         let w = ang_vel.0;
         if w.abs() > 0.0 && w.is_finite() {
-            let damp_factor = (1.0 - ANGULAR_DRAG_COEFFICIENT * w.abs() * dt).clamp(0.0, 1.0);
+            let damp_factor = (-ANGULAR_DRAG_COEFFICIENT * w.abs() * dt).exp();
             ang_vel.0 *= damp_factor;
         }
     }
@@ -548,7 +570,7 @@ fn apply_kick(
         if accumulator.0 < KICK_THRESHOLD {
             continue;
         }
-        accumulator.0 = 0.0;
+        accumulator.0 -= KICK_THRESHOLD;
 
         let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
         let thrust = facing_dir * effective_strength * MAX_IMPULSE;
@@ -658,6 +680,47 @@ pub fn vision_update(
                     vision.see_craber = true;
                 }
             }
+            VisionEventType::Wall => {
+                if let Ok((mut vision, global_transform, _collider, _parent)) =
+                    query.get_mut(vision_event.vision_entity)
+                {
+                    let manifolds = &vision_event.manifolds;
+                    let mut min_distance = f32::MAX;
+                    let mut closest_point = Vec2::new(0.0, 0.0);
+
+                    for manifold in manifolds {
+                        for contact in &manifold.points {
+                            if vision_event.entity_id == 1 {
+                                let distance = contact.anchor1.length() - contact.penetration;
+                                if distance < min_distance {
+                                    min_distance = distance;
+                                    closest_point = contact.anchor1;
+                                }
+                            } else {
+                                let distance = contact.anchor2.length() - contact.penetration;
+                                if distance < min_distance {
+                                    min_distance = distance;
+                                    closest_point = contact.anchor2;
+                                }
+                            }
+                        }
+                    }
+                    if !closest_point.x.is_finite() || !closest_point.y.is_finite() || !min_distance.is_finite() {
+                        continue;
+                    }
+                    if min_distance > 0.0 {
+                        closest_point = closest_point / min_distance;
+                    }
+                    let vision_direction = global_transform.rotation().mul_vec3(Vec3::Y);
+                    let craber_direction = vision_direction;
+                    vision.nearest_wall_distance = min_distance;
+                    vision.nearest_wall_direction = -angle_direction_between_vectors(
+                        craber_direction,
+                        Vec3::new(closest_point.x, closest_point.y, 0.),
+                    );
+                    vision.see_wall = true;
+                }
+            }
         }
     }
 }
@@ -721,6 +784,24 @@ pub fn brain_update(
             if vision.craber_seen_timer <= 0.0 {
                 brain.update_input(NeuronType::NearestCraberAngle, 0.0);
                 brain.update_input(NeuronType::NearestCraberDistance, 0.0);
+            }
+        }
+        if vision.see_wall {
+            brain.update_input(
+                NeuronType::NearestWallAngle,
+                vision.nearest_wall_direction,
+            );
+            brain.update_input(
+                NeuronType::NearestWallDistance,
+                vision.nearest_wall_distance,
+            );
+            vision.wall_seen_timer = VISION_UPDATE_RATE;
+            vision.no_see_wall();
+        } else {
+            vision.wall_seen_timer -= dt;
+            if vision.wall_seen_timer <= 0.0 {
+                brain.update_input(NeuronType::NearestWallAngle, 0.0);
+                brain.update_input(NeuronType::NearestWallDistance, 0.0);
             }
         }
         brain.feed_forward();
@@ -840,10 +921,11 @@ fn debug_check_finite(
             for child in children.iter() {
                 if let Ok(vision) = vision_query.get(child) {
                     vision_info = format!(
-                        "food_dir={} food_dist={} craber_dir={} craber_dist={} see_food={} see_craber={}",
+                        "food_dir={} food_dist={} craber_dir={} craber_dist={} wall_dir={} wall_dist={} see_food={} see_craber={} see_wall={}",
                         vision.nearest_food_direction, vision.nearest_food_distance,
                         vision.nearest_craber_direction, vision.nearest_craber_distance,
-                        vision.see_food, vision.see_craber
+                        vision.nearest_wall_direction, vision.nearest_wall_distance,
+                        vision.see_food, vision.see_craber, vision.see_wall
                     );
                 }
             }
@@ -906,6 +988,14 @@ fn draw_vision_debug(
                         facing.x * angle.sin() + facing.y * angle.cos(),
                     );
                     gizmos.line_2d(pos, pos + craber_dir * 40.0, Color::srgb(1.0, 0.0, 0.0));
+                }
+                if vision.see_wall {
+                    let angle = vision.nearest_wall_direction.clamp(-1.0, 1.0).asin();
+                    let wall_dir = Vec2::new(
+                        facing.x * angle.cos() - facing.y * angle.sin(),
+                        facing.x * angle.sin() + facing.y * angle.cos(),
+                    );
+                    gizmos.line_2d(pos, pos + wall_dir * 40.0, Color::srgb(1.0, 1.0, 0.0));
                 }
             }
         }

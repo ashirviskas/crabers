@@ -171,6 +171,16 @@ impl Brain {
                 value: 0.0,
             },
             Neuron {
+                neuron_type: NeuronType::NearestWallAngle,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::NearestWallDistance,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
                 neuron_type: NeuronType::BrainInterval,
                 activation_function: ActivationFunction::None,
                 value: 0.0,
@@ -688,11 +698,15 @@ pub struct Vision {
     pub nearest_food_distance: f32,
     pub nearest_craber_direction: f32,
     pub nearest_craber_distance: f32,
+    pub nearest_wall_direction: f32,
+    pub nearest_wall_distance: f32,
     pub see_food: bool,
     pub see_craber: bool,
+    pub see_wall: bool,
     pub entities_in_vision: Vec<Entity>,
     pub food_seen_timer: f32,
     pub craber_seen_timer: f32,
+    pub wall_seen_timer: f32,
 }
 
 impl Vision {
@@ -707,5 +721,10 @@ impl Vision {
         self.nearest_craber_distance = std::f32::MAX;
         self.nearest_craber_direction = 0.;
         self.entities_in_vision = Vec::new();
+    }
+    pub fn no_see_wall(&mut self) {
+        self.see_wall = false;
+        self.nearest_wall_distance = std::f32::MAX;
+        self.nearest_wall_direction = 0.;
     }
 }

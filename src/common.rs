@@ -105,6 +105,7 @@ pub enum EntityType {
     Craber,
     Food,
     Vision,
+    Wall,
 }
 
 /// To be used only for getting directions for food/other crabers

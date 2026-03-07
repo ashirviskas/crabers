@@ -100,6 +100,7 @@ pub struct ReproduceEvent {
 pub enum VisionEventType {
     Craber,
     Food,
+    Wall,
 }
 
 #[derive(Message)]
@@ -260,11 +261,15 @@ pub fn spawn_craber(
             nearest_food_distance: 0.0,
             nearest_craber_direction: 0.0,
             nearest_craber_distance: 0.0,
+            nearest_wall_direction: 0.0,
+            nearest_wall_distance: 0.0,
             see_food: false,
             see_craber: false,
+            see_wall: false,
             entities_in_vision: Vec::new(),
             food_seen_timer: 0.0,
             craber_seen_timer: 0.0,
+            wall_seen_timer: 0.0,
         };
         let rand_pretty_color = Color::srgba(
             rand::rng().random_range(0.0..1.0),
@@ -285,7 +290,7 @@ pub fn spawn_craber(
             ))
             .insert(CollisionLayers::new(
                 [Layer::Vision],
-                [Layer::Food, Layer::Craber],
+                [Layer::Food, Layer::Craber, Layer::Wall],
             ))
             .insert(vision)
             .insert(Weight { weight: 0.0 })
