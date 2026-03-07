@@ -45,6 +45,7 @@ fn main() {
     App::new()
         .add_plugins(DefaultPlugins.set(WindowPlugin {
             primary_window: Some(Window {
+                canvas: Some("#game-canvas".to_string()),
                 fit_canvas_to_parent: true,
                 ..default()
             }),
@@ -236,6 +237,8 @@ fn egui_ui(
             ui.label(format!("Food: {}", debug_info.food_count));
             ui.label(format!("Total: {}", debug_info.entity_count));
             ui.label(format!("FPS: {:.1}", debug_info.fps));
+            ui.separator();
+            ui.label("Press P for vision debug");
         });
 
     // Right panel: neural network (only when a craber is selected)
