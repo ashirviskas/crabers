@@ -2,6 +2,11 @@ use bevy::prelude::*;
 use rand::RngExt;
 use rand::seq::IndexedRandom;
 
+/// Clamp that maps NaN/Inf to 0.0 instead of propagating.
+fn finite_clamp(v: f32, min: f32, max: f32) -> f32 {
+    if v.is_finite() { v.clamp(min, max) } else { 0.0 }
+}
+
 const CRABER_MAX_WANT_TO_ATTACK: f32 = 10.;
 
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
@@ -434,7 +439,7 @@ impl Brain {
                 }
             }
             self.hidden_layers[h_idx].value =
-                self.hidden_layers[h_idx].activation_function.calculate(sum);
+                finite_clamp(self.hidden_layers[h_idx].activation_function.calculate(sum), -1e6, 1e6);
         }
 
         // Pull-compute output neurons
@@ -449,7 +454,7 @@ impl Brain {
                     sum += prev[conn.from_id] * conn.weight + conn.bias;
                 }
             }
-            self.outputs[o_idx].value = self.outputs[o_idx].activation_function.calculate(sum);
+            self.outputs[o_idx].value = finite_clamp(self.outputs[o_idx].activation_function.calculate(sum), -1e6, 1e6);
         }
     }
 

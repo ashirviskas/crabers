@@ -86,14 +86,14 @@ pub const KICK_ENERGY_MODIFIER: f32 = 2.0;
 
 // Quadratic water drag constants
 pub const LINEAR_DRAG_COEFFICIENT: f32 = 0.01;
-pub const ANGULAR_DRAG_COEFFICIENT: f32 = 3.0;
+pub const ANGULAR_DRAG_COEFFICIENT: f32 = 1.0;
 pub const KICK_STEEPNESS: f32 = 0.5;
 pub const KICK_RATE_STEEPNESS: f32 = 0.5;
 
 // Rotation constants
 pub const ROTATION_THRESHOLD: f32 = 0.01;
 pub const ROTATION_RATE_STEEPNESS: f32 = 0.5;
-pub const MAX_ANGULAR_IMPULSE: f32 = 0.03;
+pub const MAX_ANGULAR_IMPULSE: f32 = 0.1;
 
 // Brain tick constants
 pub const BRAIN_TICK_MIN_RATE: f32 = 1.0; // min ticks per second (Hz)
@@ -111,6 +111,15 @@ pub enum EntityType {
 pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
     let v1_2d = Vec2::new(v1.x, v1.y);
     let v2_2d = Vec2::new(v2.x, v2.y);
+
+    // Guard against non-finite or zero-length vectors
+    if !v1_2d.x.is_finite() || !v1_2d.y.is_finite()
+        || !v2_2d.x.is_finite() || !v2_2d.y.is_finite()
+        || v1_2d.length_squared() == 0.0
+        || v2_2d.length_squared() == 0.0
+    {
+        return 0.0;
+    }
 
     // Calculate the angle between vectors using atan2
     let mut angle_radians = v2_2d.y.atan2(v2_2d.x) - v1_2d.y.atan2(v1_2d.x);

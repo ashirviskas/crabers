@@ -95,6 +95,7 @@ fn main() {
         .add_systems(Update, spawn_food)
         .add_systems(Update, toggle_debug_vision)
         .add_systems(Update, draw_vision_debug)
+        .add_systems(Update, debug_check_finite)
         .run();
 }
 
@@ -494,27 +495,35 @@ fn apply_rotation(
         accumulator.0 = 0.0;
 
         let angular_impulse = rotation_direction * effective_rate * MAX_ANGULAR_IMPULSE;
-        forces.apply_angular_impulse(angular_impulse);
+        if angular_impulse.is_finite() {
+            forces.apply_angular_impulse(angular_impulse);
+        } else {
+            warn!("apply_rotation: NaN angular_impulse! rot_dir={} eff_rate={} brain_rotation={} brain_rotate_rate={}",
+                rotation_direction, effective_rate, brain.get_rotation(), brain.get_rotate_rate());
+        }
     }
 }
 
-/// System 2: Quadratic water drag — force scales with v², giving natural underwater movement
-fn apply_water_drag(mut query: Query<Forces, With<Craber>>) {
-    for mut forces in query.iter_mut() {
-        // Quadratic linear drag: F = -c * |v| * v
-        let vel = forces.linear_velocity();
-        let speed = vel.length();
-        if speed > 0.0 {
-            let drag = -LINEAR_DRAG_COEFFICIENT * speed * vel;
-            forces.apply_force(drag);
+/// System 2: Water drag via direct velocity damping — guarantees convergence, no overflow
+fn apply_water_drag(
+    mut query: Query<(&mut LinearVelocity, &mut AngularVelocity), With<Craber>>,
+    time: Res<Time>,
+) {
+    let dt = time.delta_secs();
+    for (mut lin_vel, mut ang_vel) in query.iter_mut() {
+        // Linear drag: damp velocity directly each frame
+        let speed = lin_vel.0.length();
+        if speed > 0.0 && speed.is_finite() {
+            // Quadratic feel: faster speeds get damped more aggressively
+            let damp_factor = (1.0 - LINEAR_DRAG_COEFFICIENT * speed * dt).clamp(0.0, 1.0);
+            lin_vel.0 *= damp_factor;
         }
 
-        // Quadratic angular drag: τ = -c * |ω| * ω
-        let ang_vel = forces.angular_velocity();
-        let ang_speed = ang_vel.abs();
-        if ang_speed > 0.0 {
-            let torque = -ANGULAR_DRAG_COEFFICIENT * ang_speed * ang_vel;
-            forces.apply_torque(torque);
+        // Angular drag: damp angular velocity directly each frame
+        let w = ang_vel.0;
+        if w.abs() > 0.0 && w.is_finite() {
+            let damp_factor = (1.0 - ANGULAR_DRAG_COEFFICIENT * w.abs() * dt).clamp(0.0, 1.0);
+            ang_vel.0 *= damp_factor;
         }
     }
 }
@@ -540,6 +549,12 @@ fn apply_kick(
 
         let facing_dir = (transform.rotation * Vec3::NEG_Y).truncate();
         let thrust = facing_dir * effective_strength * MAX_IMPULSE;
+        if !thrust.x.is_finite() || !thrust.y.is_finite() {
+            warn!("apply_kick: NaN thrust! entity={:?} facing_dir={:?} eff_strength={} rot={:?} kick_strength={} kick_rate={}",
+                entity, facing_dir, effective_strength, transform.rotation,
+                brain.get_kick_strength(), brain.get_kick_rate());
+            continue;
+        }
         forces.apply_linear_impulse(thrust);
 
         let energy_cost = effective_strength.powf(1.5) * KICK_ENERGY_MODIFIER;
@@ -581,12 +596,17 @@ pub fn vision_update(
                             }
                         }
                     }
-                    closest_point = -closest_point / min_distance;
+                    if !closest_point.x.is_finite() || !closest_point.y.is_finite() || !min_distance.is_finite() {
+                        continue;
+                    }
+                    if min_distance > 0.0 {
+                        closest_point = closest_point / min_distance;
+                    }
                     vision.entities_in_vision.push(vision_event.entity);
                     let vision_direction = global_transform.rotation().mul_vec3(Vec3::Y);
                     let craber_direction = vision_direction;
                     vision.nearest_food_distance = min_distance;
-                    vision.nearest_food_direction = angle_direction_between_vectors(
+                    vision.nearest_food_direction = -angle_direction_between_vectors(
                         craber_direction,
                         Vec3::new(closest_point.x, closest_point.y, 0.),
                     );
@@ -618,12 +638,17 @@ pub fn vision_update(
                             }
                         }
                     }
-                    closest_point = -closest_point / min_distance;
+                    if !closest_point.x.is_finite() || !closest_point.y.is_finite() || !min_distance.is_finite() {
+                        continue;
+                    }
+                    if min_distance > 0.0 {
+                        closest_point = closest_point / min_distance;
+                    }
                     vision.entities_in_vision.push(vision_event.entity);
                     let vision_direction = global_transform.rotation().mul_vec3(Vec3::Y);
                     let craber_direction = vision_direction;
                     vision.nearest_craber_distance = min_distance;
-                    vision.nearest_craber_direction = angle_direction_between_vectors(
+                    vision.nearest_craber_direction = -angle_direction_between_vectors(
                         craber_direction,
                         Vec3::new(closest_point.x, closest_point.y, 0.),
                     );
@@ -738,7 +763,11 @@ pub fn craber_attack_lose_health_add_energy(
             }
             if health.health - craber_attack_event.attack_damage < 0. {
                 let actual_damage = health.health;
-                let energy_modifier = actual_damage / craber_attack_event.attack_damage;
+                let energy_modifier = if craber_attack_event.attack_damage > 0.0 {
+                    actual_damage / craber_attack_event.attack_damage
+                } else {
+                    0.0
+                };
                 if let Ok(mut energy) =
                     attacker_query.get_mut(craber_attack_event.attacking_craber_entity)
                 {
@@ -760,6 +789,78 @@ pub fn craber_attack_lose_health_add_energy(
 fn toggle_debug_vision(keyboard: Res<ButtonInput<KeyCode>>, mut debug: ResMut<DebugVisionEnabled>) {
     if keyboard.just_pressed(KeyCode::KeyP) {
         debug.0 = !debug.0;
+    }
+}
+
+fn debug_check_finite(
+    craber_query: Query<(Entity, &Transform, &LinearVelocity, &AngularVelocity, &Brain, &Children), With<Craber>>,
+    vision_query: Query<&Vision>,
+    food_query: Query<(Entity, &Transform), With<Food>>,
+) {
+    for (entity, transform, lin_vel, ang_vel, brain, children) in craber_query.iter() {
+        let pos = transform.translation;
+        let rot = transform.rotation;
+        let has_bad_pos = !pos.x.is_finite() || !pos.y.is_finite();
+        let has_bad_vel = !lin_vel.x.is_finite() || !lin_vel.y.is_finite();
+        let has_bad_ang = !ang_vel.0.is_finite();
+        let has_bad_rot = !rot.x.is_finite() || !rot.y.is_finite() || !rot.z.is_finite() || !rot.w.is_finite();
+
+        if has_bad_pos || has_bad_vel || has_bad_ang || has_bad_rot {
+            // Dump brain state
+            let mut nan_inputs = Vec::new();
+            for (i, n) in brain.inputs.iter().enumerate() {
+                if !n.value.is_finite() {
+                    nan_inputs.push(format!("input[{}]({:?})={}", i, n.neuron_type, n.value));
+                }
+            }
+            let mut nan_hidden = Vec::new();
+            for (i, n) in brain.hidden_layers.iter().enumerate() {
+                if !n.value.is_finite() {
+                    nan_hidden.push(format!("hidden[{}]={}", i, n.value));
+                }
+            }
+            let mut nan_outputs = Vec::new();
+            for (i, n) in brain.outputs.iter().enumerate() {
+                if !n.value.is_finite() {
+                    nan_outputs.push(format!("output[{}]({:?})={}", i, n.neuron_type, n.value));
+                }
+            }
+            let mut nan_weights = Vec::new();
+            for (i, c) in brain.connections.iter().enumerate() {
+                if !c.weight.is_finite() || !c.bias.is_finite() {
+                    nan_weights.push(format!("conn[{}] {}->{}  w={} b={}", i, c.from_id, c.to_id, c.weight, c.bias));
+                }
+            }
+
+            // Dump vision state
+            let mut vision_info = String::from("no vision child");
+            for child in children.iter() {
+                if let Ok(vision) = vision_query.get(child) {
+                    vision_info = format!(
+                        "food_dir={} food_dist={} craber_dir={} craber_dist={} see_food={} see_craber={}",
+                        vision.nearest_food_direction, vision.nearest_food_distance,
+                        vision.nearest_craber_direction, vision.nearest_craber_distance,
+                        vision.see_food, vision.see_craber
+                    );
+                }
+            }
+
+            panic!(
+                "NON-FINITE STATE on Craber {:?}:\n  pos={:?}\n  vel={:?}\n  ang_vel={:?}\n  rot={:?}\n  \
+                 nan_inputs={:?}\n  nan_hidden={:?}\n  nan_outputs={:?}\n  nan_weights={:?}\n  vision: {}",
+                entity, pos, lin_vel, ang_vel, rot,
+                nan_inputs, nan_hidden, nan_outputs, nan_weights, vision_info
+            );
+        }
+    }
+    for (entity, transform) in food_query.iter() {
+        let pos = transform.translation;
+        if !pos.x.is_finite() || !pos.y.is_finite() {
+            panic!(
+                "NON-FINITE POSITION on Food {:?}: pos={:?}",
+                entity, pos
+            );
+        }
     }
 }
 
