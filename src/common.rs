@@ -80,25 +80,51 @@ pub struct DebugInfo {
 #[derive(Resource)]
 pub struct SimulationStats {
     pub craber_history: VecDeque<[f64; 2]>,
+    pub food_history: VecDeque<[f64; 2]>,
+    pub avg_age_history: VecDeque<[f64; 2]>,
+    pub max_age_history: VecDeque<[f64; 2]>,
+    pub avg_generation_history: VecDeque<[f64; 2]>,
+    pub max_generation_history: VecDeque<[f64; 2]>,
+    pub avg_energy_history: VecDeque<[f64; 2]>,
+    pub avg_health_history: VecDeque<[f64; 2]>,
+    pub avg_hidden_neurons_history: VecDeque<[f64; 2]>,
+    pub avg_connections_history: VecDeque<[f64; 2]>,
+    pub birth_rate_history: VecDeque<[f64; 2]>,
+    pub death_rate_history: VecDeque<[f64; 2]>,
+    pub birth_counter: u32,
+    pub death_counter: u32,
     pub sample_timer: Timer,
-    capacity: usize,
+    pub capacity: usize,
 }
 
 impl SimulationStats {
     pub fn new(capacity: usize) -> Self {
         Self {
             craber_history: VecDeque::with_capacity(capacity),
+            food_history: VecDeque::with_capacity(capacity),
+            avg_age_history: VecDeque::with_capacity(capacity),
+            max_age_history: VecDeque::with_capacity(capacity),
+            avg_generation_history: VecDeque::with_capacity(capacity),
+            max_generation_history: VecDeque::with_capacity(capacity),
+            avg_energy_history: VecDeque::with_capacity(capacity),
+            avg_health_history: VecDeque::with_capacity(capacity),
+            avg_hidden_neurons_history: VecDeque::with_capacity(capacity),
+            avg_connections_history: VecDeque::with_capacity(capacity),
+            birth_rate_history: VecDeque::with_capacity(capacity),
+            death_rate_history: VecDeque::with_capacity(capacity),
+            birth_counter: 0,
+            death_counter: 0,
             sample_timer: Timer::from_seconds(1.0, TimerMode::Repeating),
             capacity,
         }
     }
+}
 
-    pub fn record(&mut self, time: f64, count: f64) {
-        if self.craber_history.len() >= self.capacity {
-            self.craber_history.pop_front();
-        }
-        self.craber_history.push_back([time, count]);
+pub fn push_sample(history: &mut VecDeque<[f64; 2]>, capacity: usize, time: f64, value: f64) {
+    if history.len() >= capacity {
+        history.pop_front();
     }
+    history.push_back([time, value]);
 }
 
 pub fn collides(a: &Transform, b: &Transform, collision_threshold: f32) -> bool {

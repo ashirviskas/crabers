@@ -6,6 +6,7 @@ use bevy::{
 };
 use bevy_egui::{EguiContexts, EguiPlugin, EguiPrimaryContextPass, egui};
 use egui_plot::{Line, Plot, PlotPoints};
+use std::collections::VecDeque;
 
 mod craber;
 use craber::*;
@@ -209,12 +210,85 @@ fn record_simulation_stats(
     time: Res<Time>,
     debug_info: Res<DebugInfo>,
     mut stats: ResMut<SimulationStats>,
+    craber_query: Query<(&CraberAge, &Generation, &Energy, &Health), With<Craber>>,
+    brain_query: Query<&Brain, With<Craber>>,
 ) {
     stats.sample_timer.tick(time.delta());
     if stats.sample_timer.just_finished() {
         let elapsed = time.elapsed_secs_f64();
-        stats.record(elapsed, debug_info.craber_count as f64);
+        let cap = stats.capacity;
+
+        push_sample(&mut stats.craber_history, cap, elapsed, debug_info.craber_count as f64);
+        push_sample(&mut stats.food_history, cap, elapsed, debug_info.food_count as f64);
+
+        // Compute craber metrics
+        let mut total_age = 0.0_f64;
+        let mut max_age = 0.0_f64;
+        let mut total_gen = 0.0_f64;
+        let mut max_gen = 0.0_f64;
+        let mut total_energy = 0.0_f64;
+        let mut total_health = 0.0_f64;
+        let mut count = 0_u32;
+
+        for (age, generation, energy, health) in craber_query.iter() {
+            let a = age.0 as f64;
+            let g = generation.generation_id as f64;
+            total_age += a;
+            if a > max_age { max_age = a; }
+            total_gen += g;
+            if g > max_gen { max_gen = g; }
+            total_energy += energy.energy as f64;
+            total_health += health.health as f64;
+            count += 1;
+        }
+
+        let divisor = count.max(1) as f64;
+        push_sample(&mut stats.avg_age_history, cap, elapsed, total_age / divisor);
+        push_sample(&mut stats.max_age_history, cap, elapsed, max_age);
+        push_sample(&mut stats.avg_generation_history, cap, elapsed, total_gen / divisor);
+        push_sample(&mut stats.max_generation_history, cap, elapsed, max_gen);
+        push_sample(&mut stats.avg_energy_history, cap, elapsed, total_energy / divisor);
+        push_sample(&mut stats.avg_health_history, cap, elapsed, total_health / divisor);
+
+        // Brain complexity
+        let mut total_hidden = 0_u64;
+        let mut total_connections = 0_u64;
+        let mut brain_count = 0_u32;
+        for brain in brain_query.iter() {
+            total_hidden += brain.hidden_layers.len() as u64;
+            total_connections += brain.connections.len() as u64;
+            brain_count += 1;
+        }
+        let brain_divisor = brain_count.max(1) as f64;
+        push_sample(&mut stats.avg_hidden_neurons_history, cap, elapsed, total_hidden as f64 / brain_divisor);
+        push_sample(&mut stats.avg_connections_history, cap, elapsed, total_connections as f64 / brain_divisor);
+
+        // Birth/death rates (counts since last sample)
+        let births = stats.birth_counter as f64;
+        let deaths = stats.death_counter as f64;
+        push_sample(&mut stats.birth_rate_history, cap, elapsed, births);
+        push_sample(&mut stats.death_rate_history, cap, elapsed, deaths);
+        stats.birth_counter = 0;
+        stats.death_counter = 0;
     }
+}
+
+fn plot_lines(ui: &mut egui::Ui, plot_id: &str, lines: &[(&str, &VecDeque<[f64; 2]>)]) {
+    Plot::new(plot_id)
+        .view_aspect(2.0)
+        .label_formatter(|name, value| {
+            if name.is_empty() {
+                format!("t = {:.1}s\n{:.1}", value.x, value.y)
+            } else {
+                format!("{name}\nt = {:.1}s\n{:.1}", value.x, value.y)
+            }
+        })
+        .show(ui, |plot_ui| {
+            for (name, data) in lines {
+                let points: PlotPoints = PlotPoints::new(data.iter().copied().collect());
+                plot_ui.line(Line::new(*name, points));
+            }
+        });
 }
 
 fn egui_charts(
@@ -234,29 +308,79 @@ fn egui_charts(
         .corner_radius(6.0)
         .inner_margin(10.0);
 
+    // Population window
     egui::Window::new("Population")
         .default_pos([10.0, 350.0])
         .default_size([300.0, 200.0])
         .resizable(true)
         .collapsible(true)
+        .default_open(true)
         .frame(transparent_frame)
         .show(ctx, |ui| {
-            let points: PlotPoints = PlotPoints::new(stats.craber_history.iter().copied().collect());
-            let line = Line::new("Crabers", points);
-            Plot::new("craber_population")
-                .view_aspect(2.0)
-                .x_axis_label("Time (s)")
-                .y_axis_label("Count")
-                .label_formatter(|name, value| {
-                    if name.is_empty() {
-                        format!("t = {:.1}s\ncount = {:.0}", value.x, value.y)
-                    } else {
-                        format!("{name}\nt = {:.1}s\ncount = {:.0}", value.x, value.y)
-                    }
-                })
-                .show(ui, |plot_ui| {
-                    plot_ui.line(line);
-                });
+            ui.label("Crabers");
+            plot_lines(ui, "craber_population", &[("Crabers", &stats.craber_history)]);
+            ui.separator();
+            ui.label("Food");
+            plot_lines(ui, "food_population", &[("Food", &stats.food_history)]);
+        });
+
+    // Vitals window
+    egui::Window::new("Vitals")
+        .default_pos([10.0, 560.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(false)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            plot_lines(ui, "vitals", &[
+                ("Avg Energy", &stats.avg_energy_history),
+                ("Avg Health", &stats.avg_health_history),
+            ]);
+        });
+
+    // Demographics window
+    egui::Window::new("Demographics")
+        .default_pos([10.0, 585.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(false)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            ui.label("Age");
+            plot_lines(ui, "age", &[
+                ("Avg Age", &stats.avg_age_history),
+                ("Max Age", &stats.max_age_history),
+            ]);
+            ui.separator();
+            ui.label("Generation");
+            plot_lines(ui, "generation", &[
+                ("Avg Generation", &stats.avg_generation_history),
+                ("Max Generation", &stats.max_generation_history),
+            ]);
+        });
+
+    // Complexity & Rates window
+    egui::Window::new("Complexity & Rates")
+        .default_pos([10.0, 610.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(false)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
+            ui.label("Brain Complexity");
+            plot_lines(ui, "brain_complexity", &[
+                ("Avg Hidden Neurons", &stats.avg_hidden_neurons_history),
+                ("Avg Connections", &stats.avg_connections_history),
+            ]);
+            ui.separator();
+            ui.label("Birth / Death Rate");
+            plot_lines(ui, "birth_death_rate", &[
+                ("Births", &stats.birth_rate_history),
+                ("Deaths", &stats.death_rate_history),
+            ]);
         });
 }
 

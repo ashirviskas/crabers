@@ -193,12 +193,14 @@ pub fn craber_despawner(
     query: Query<(Entity, &Health, &Energy, &Transform)>,
     mut craber_despawn_events: MessageReader<CraberDespawnEvent>,
     mut food_spawn_events: MessageWriter<FoodSpawnEvent>,
+    mut stats: ResMut<SimulationStats>,
 ) {
     for event in craber_despawn_events.read() {
         if let Ok((craber_entity, _craber_health, craber_energy, craber_transform)) =
             query.get(event.entity)
         {
             commands.entity(craber_entity).despawn();
+            stats.death_counter += 1;
             let new_food_energy = craber_energy.energy * CRABER_DEATH_ENERGY_FACTOR;
             food_spawn_events.write(FoodSpawnEvent {
                 transform: craber_transform.clone(),
@@ -470,6 +472,7 @@ pub fn craber_sexual_reproduce(
     mut craber_query: Query<(&Transform, &Brain, &mut Energy, &mut LastReproducedValue, &mut ChildrenCount)>,
     mut sexual_reproduce_events: MessageReader<SexualReproduceEvent>,
     mut spawn_events: MessageWriter<SpawnEvent>,
+    mut stats: ResMut<SimulationStats>,
 ) {
     for event in sexual_reproduce_events.read() {
         // Get partner brain first (immutable borrow)
@@ -518,6 +521,7 @@ pub fn craber_sexual_reproduce(
                 energy: CRABER_REPRODUCE_ENERGY,
             },
         });
+        stats.birth_counter += 1;
     }
 }
 
@@ -526,6 +530,7 @@ pub fn craber_reproduce(
     mut craber_query: Query<(&Transform, &Brain, &mut Energy, &mut LastReproducedValue, &mut ChildrenCount)>,
     mut reproduce_events: MessageReader<ReproduceEvent>,
     mut spawn_events: MessageWriter<SpawnEvent>,
+    mut stats: ResMut<SimulationStats>,
 ) {
     for event in reproduce_events.read() {
         if let Ok((transform, brain, mut energy, mut last_reproduced, mut children_count)) = craber_query.get_mut(event.entity) {
@@ -566,6 +571,7 @@ pub fn craber_reproduce(
                     energy: CRABER_REPRODUCE_ENERGY,
                 },
             });
+            stats.birth_counter += 1;
         }
     }
 }
