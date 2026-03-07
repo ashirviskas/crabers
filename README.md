@@ -63,16 +63,32 @@ Building a WASM build:
     - [ ] Power (for speed)
 - [x] Initial implementation of the neural brain with predefined inputs and outputs
   - [ ] Inputs:
+    - [x] Always On
+    - [x] Health
+    - [x] Energy
+    - [x] Age
     - [ ] Speed
     - [x] Angle to nearest food
-    - [x] Angle to nearest organism
-    - [ ] Genetic closeness
-    - [ ] Current energy level
-    - [ ] Health
+    - [x] Distance to nearest food
+    - [x] Angle to nearest craber
+    - [x] Distance to nearest craber
+    - [x] Angle to nearest wall
+    - [x] Distance to nearest wall
+    - [x] Genetic closeness to nearest craber
+    - [x] Brain tick interval
+    - [x] Last reproduced (decay timer)
   - [ ] Outputs:
-    - [x] Forward/backward acceleration
+    - [x] Kick strength
+    - [x] Kick rate
+    - [x] Align velocity
+    - [x] Rotate
+    - [x] Rotate rate
+    - [x] Modify brain interval
+    - [x] Want to reproduce
+    - [x] Want sexual reproduction
+    - [x] Want to attack
+    - [ ] Want to defend
     - [ ] Left/right acceleration / strafing
-    - [x] Rotational acceleration (turning/steering)
 - [x] Basic environment setup with food source spawning.
 - [ ] Basic growing and maturity system for crabers.
 - [x] Simple reproduction mechanics without advanced features.

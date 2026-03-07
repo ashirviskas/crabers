@@ -16,9 +16,11 @@ const CRABER_MAX_WANT_TO_ATTACK: f32 = 10.;
 #[derive(PartialEq, Eq, Hash, Clone, Copy, Debug)]
 pub enum NeuronType {
     // Input
-    AlwaysOn,     // Implemented
-    CraberHealth, // TODO
+    AlwaysOn,
+    CraberHealth,
     CraberSpeed,  // TODO
+    CraberEnergy,
+    CraberAge,
 
     NearestFoodAngle, // Implemented, value between -1 (left) and +1 (right) corresponding to the angle
     NearestFoodDistance, // TODO
@@ -28,8 +30,10 @@ pub enum NeuronType {
 
     NearestWallAngle,    // TODO
     NearestWallDistance, // TODO
+    NearestCraberGeneticCloseness, // Genetic closeness to nearest visible craber (0-1)
     // Interval between each update. TODO: Add cost for higher intervals.
     BrainInterval, // TODO
+    LastReproduced, // Decay-based: 1.0 after reproduction, decays toward 0
     // Hidden
     Hidden,
     // Output
@@ -51,13 +55,17 @@ impl NeuronType {
             NeuronType::AlwaysOn,
             NeuronType::CraberHealth,
             NeuronType::CraberSpeed,
+            NeuronType::CraberEnergy,
+            NeuronType::CraberAge,
             NeuronType::NearestFoodAngle,
             NeuronType::NearestFoodDistance,
             NeuronType::NearestCraberAngle,
             NeuronType::NearestCraberDistance,
             NeuronType::NearestWallAngle,
             NeuronType::NearestWallDistance,
+            NeuronType::NearestCraberGeneticCloseness,
             NeuronType::BrainInterval,
+            NeuronType::LastReproduced,
         ];
         let mut rng = rand::rng();
         *input_types.choose(&mut rng).unwrap()
@@ -160,6 +168,21 @@ impl Brain {
                 value: 1.0,
             },
             Neuron {
+                neuron_type: NeuronType::CraberHealth,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::CraberEnergy,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::CraberAge,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
                 neuron_type: NeuronType::NearestFoodAngle,
                 activation_function: ActivationFunction::None,
                 value: 0.0,
@@ -190,7 +213,17 @@ impl Brain {
                 value: 0.0,
             },
             Neuron {
+                neuron_type: NeuronType::NearestCraberGeneticCloseness,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
                 neuron_type: NeuronType::BrainInterval,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::LastReproduced,
                 activation_function: ActivationFunction::None,
                 value: 0.0,
             },
@@ -274,7 +307,7 @@ impl Brain {
             },
             // FoodAngle -> Hidden
             Connection {
-                from_id: 1,
+                from_id: 4,
                 to_id: 100,
                 weight: 1.0,
                 bias: 0.0,
@@ -282,7 +315,7 @@ impl Brain {
             },
             // CraberAngle -> Hidden
             Connection {
-                from_id: 3,
+                from_id: 6,
                 to_id: 100,
                 weight: 0.1,
                 bias: 0.0,
@@ -1022,6 +1055,7 @@ pub struct Vision {
     pub nearest_food_distance: f32,
     pub nearest_craber_direction: f32,
     pub nearest_craber_distance: f32,
+    pub nearest_craber_genetic_closeness: f32,
     pub nearest_wall_direction: f32,
     pub nearest_wall_distance: f32,
     pub see_food: bool,
@@ -1044,6 +1078,7 @@ impl Vision {
         self.see_craber = false;
         self.nearest_craber_distance = std::f32::MAX;
         self.nearest_craber_direction = 0.;
+        self.nearest_craber_genetic_closeness = 0.;
         self.entities_in_vision = Vec::new();
     }
     pub fn no_see_wall(&mut self) {
