@@ -128,11 +128,5 @@ pub fn angle_direction_between_vectors(v1: Vec3, v2: Vec3) -> f32 {
     // Adjust angle to range [0, 2PI]
     angle_radians = angle_radians.rem_euclid(2.0 * PI);
 
-    // Normalize the angle to [-1, 1] using sin for stronger small-angle response
-    let normalized_value = if angle_radians <= PI {
-        angle_radians.sin()
-    } else {
-        -(2.0 * PI - angle_radians).sin()
-    };
-    normalized_value
+    angle_radians
 }

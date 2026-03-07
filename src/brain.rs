@@ -85,6 +85,7 @@ pub enum ActivationFunction {
     ReLU,
     LeakyReLU,
     Softmax,
+    Sin,
 }
 
 impl ActivationFunction {
@@ -96,17 +97,19 @@ impl ActivationFunction {
             ActivationFunction::ReLU => value.max(0.0),
             ActivationFunction::LeakyReLU => value.max(0.01 * value),
             ActivationFunction::Softmax => value.exp() / value.exp(),
+            ActivationFunction::Sin => value.sin(),
         }
     }
     pub fn random() -> Self {
         let mut rng = rand::rng();
-        match rng.random_range(0..5) {
+        match rng.random_range(0..6) {
             0 => ActivationFunction::None,
             1 => ActivationFunction::Sigmoid,
             2 => ActivationFunction::Tanh,
             3 => ActivationFunction::ReLU,
             4 => ActivationFunction::LeakyReLU,
             5 => ActivationFunction::Softmax,
+            6 => ActivationFunction::Sin,
             _ => ActivationFunction::None, // Fallback
         }
     }
@@ -225,7 +228,7 @@ impl Brain {
         ];
         let hidden_layers = vec![Neuron {
             neuron_type: NeuronType::Hidden,
-            activation_function: ActivationFunction::Tanh,
+            activation_function: ActivationFunction::Sin,
             value: 0.0,
         }];
         let connections = vec![

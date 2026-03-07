@@ -960,10 +960,10 @@ fn draw_vision_debug(
     }
     for (transform, children, linear_vel) in craber_query.iter() {
         let pos = transform.translation.truncate();
-        let facing = (transform.rotation * Vec3::NEG_Y).truncate().normalize();
+        let facing = (transform.rotation * Vec3::Y).truncate().normalize();
 
-        // White: facing direction
-        gizmos.line_2d(pos, pos + facing * 50.0, Color::WHITE);
+        // White: facing direction (sprite faces NEG_Y)
+        gizmos.line_2d(pos, pos - facing * 50.0, Color::WHITE);
 
         // Cyan: velocity indicator
         let vel = linear_vel.0;
@@ -974,7 +974,7 @@ fn draw_vision_debug(
         for child in children.iter() {
             if let Ok(vision) = vision_query.get(child) {
                 if vision.see_food {
-                    let angle = vision.nearest_food_direction.clamp(-1.0, 1.0).asin();
+                    let angle = -vision.nearest_food_direction;
                     let food_dir = Vec2::new(
                         facing.x * angle.cos() - facing.y * angle.sin(),
                         facing.x * angle.sin() + facing.y * angle.cos(),
@@ -982,7 +982,7 @@ fn draw_vision_debug(
                     gizmos.line_2d(pos, pos + food_dir * 40.0, Color::srgb(0.0, 1.0, 0.0));
                 }
                 if vision.see_craber {
-                    let angle = vision.nearest_craber_direction.clamp(-1.0, 1.0).asin();
+                    let angle = -vision.nearest_craber_direction;
                     let craber_dir = Vec2::new(
                         facing.x * angle.cos() - facing.y * angle.sin(),
                         facing.x * angle.sin() + facing.y * angle.cos(),
@@ -990,7 +990,7 @@ fn draw_vision_debug(
                     gizmos.line_2d(pos, pos + craber_dir * 40.0, Color::srgb(1.0, 0.0, 0.0));
                 }
                 if vision.see_wall {
-                    let angle = vision.nearest_wall_direction.clamp(-1.0, 1.0).asin();
+                    let angle = -vision.nearest_wall_direction;
                     let wall_dir = Vec2::new(
                         facing.x * angle.cos() - facing.y * angle.sin(),
                         facing.x * angle.sin() + facing.y * angle.cos(),
