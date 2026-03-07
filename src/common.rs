@@ -21,6 +21,8 @@ pub const WORLD_SIZE: f32 = 10000.0;
 #[cfg(target_arch = "wasm32")]
 pub const WORLD_SIZE: f32 = 10000.0;
 
+pub const WALL_THICKNESS: f32 = 60.0;
+
 #[derive(Message)]
 pub struct DespawnEvent {
     pub entity: Entity,
@@ -101,6 +103,11 @@ pub struct SimulationStats {
     pub median_health_history: VecDeque<[f64; 2]>,
     pub p25_health_history: VecDeque<[f64; 2]>,
     pub p75_health_history: VecDeque<[f64; 2]>,
+    pub avg_children_history: VecDeque<[f64; 2]>,
+    pub max_children_history: VecDeque<[f64; 2]>,
+    pub median_children_history: VecDeque<[f64; 2]>,
+    pub p25_children_history: VecDeque<[f64; 2]>,
+    pub p75_children_history: VecDeque<[f64; 2]>,
     pub avg_hidden_neurons_history: VecDeque<[f64; 2]>,
     pub avg_connections_history: VecDeque<[f64; 2]>,
     pub birth_rate_history: VecDeque<[f64; 2]>,
@@ -140,6 +147,11 @@ impl SimulationStats {
             median_health_history: VecDeque::with_capacity(capacity),
             p25_health_history: VecDeque::with_capacity(capacity),
             p75_health_history: VecDeque::with_capacity(capacity),
+            avg_children_history: VecDeque::with_capacity(capacity),
+            max_children_history: VecDeque::with_capacity(capacity),
+            median_children_history: VecDeque::with_capacity(capacity),
+            p25_children_history: VecDeque::with_capacity(capacity),
+            p75_children_history: VecDeque::with_capacity(capacity),
             avg_hidden_neurons_history: VecDeque::with_capacity(capacity),
             avg_connections_history: VecDeque::with_capacity(capacity),
             birth_rate_history: VecDeque::with_capacity(capacity),

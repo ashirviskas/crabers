@@ -29,7 +29,6 @@ const CRABER_SPAWN_RATE: f32 = 0.1;
 
 pub const MAX_FOOD_COUNT: usize = 10000;
 
-const WALL_THICKNESS: f32 = 60.0;
 const GRAVITY: f32 = 0.0;
 
 const VISION_UPDATE_RATE: f32 = 0.01;
@@ -214,7 +213,7 @@ fn record_simulation_stats(
     time: Res<Time>,
     debug_info: Res<DebugInfo>,
     mut stats: ResMut<SimulationStats>,
-    craber_query: Query<(&CraberAge, &Generation, &Energy, &Health), With<Craber>>,
+    craber_query: Query<(&CraberAge, &Generation, &Energy, &Health, &ChildrenCount), With<Craber>>,
     brain_query: Query<&Brain, With<Craber>>,
 ) {
     stats.sample_timer.tick(time.delta());
@@ -230,18 +229,21 @@ fn record_simulation_stats(
         let mut gens = Vec::new();
         let mut energies = Vec::new();
         let mut healths = Vec::new();
+        let mut children = Vec::new();
 
-        for (age, generation, energy, health) in craber_query.iter() {
+        for (age, generation, energy, health, children_count) in craber_query.iter() {
             ages.push(age.0 as f64);
             gens.push(generation.generation_id as f64);
             energies.push(energy.energy as f64);
             healths.push(health.health as f64);
+            children.push(children_count.0 as f64);
         }
 
         ages.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
         gens.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
         energies.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
         healths.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        children.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
 
         let len = ages.len();
         let divisor = len.max(1) as f64;
@@ -284,6 +286,13 @@ fn record_simulation_stats(
         push_sample(&mut stats.median_health_history, cap, elapsed, quantile(&healths, 0.5));
         push_sample(&mut stats.p25_health_history, cap, elapsed, quantile(&healths, 0.25));
         push_sample(&mut stats.p75_health_history, cap, elapsed, quantile(&healths, 0.75));
+
+        let total_children: f64 = children.iter().sum();
+        push_sample(&mut stats.avg_children_history, cap, elapsed, total_children / divisor);
+        push_sample(&mut stats.max_children_history, cap, elapsed, children.last().copied().unwrap_or(0.0));
+        push_sample(&mut stats.median_children_history, cap, elapsed, quantile(&children, 0.5));
+        push_sample(&mut stats.p25_children_history, cap, elapsed, quantile(&children, 0.25));
+        push_sample(&mut stats.p75_children_history, cap, elapsed, quantile(&children, 0.75));
 
         // Brain complexity
         let mut total_hidden = 0_u64;
@@ -418,6 +427,15 @@ fn egui_charts(
                 ("Min Generation", &stats.min_generation_history),
                 ("P25 Generation", &stats.p25_generation_history),
                 ("P75 Generation", &stats.p75_generation_history),
+            ]);
+            ui.separator();
+            ui.label("Children");
+            plot_lines(ui, "children", &[
+                ("Avg Children", &stats.avg_children_history),
+                ("Max Children", &stats.max_children_history),
+                ("Median Children", &stats.median_children_history),
+                ("P25 Children", &stats.p25_children_history),
+                ("P75 Children", &stats.p75_children_history),
             ]);
         });
 

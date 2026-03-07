@@ -25,9 +25,10 @@ pub fn food_spawner(
             return;
         }
         let mut rng = rand::rng();
+        let bound = WORLD_SIZE - WALL_THICKNESS - FOOD_SIZE;
         let position = Vec2::new(
-            rng.random_range((WORLD_SIZE * -1.)..WORLD_SIZE),
-            rng.random_range((WORLD_SIZE * -1.)..WORLD_SIZE),
+            rng.random_range(-bound..bound),
+            rng.random_range(-bound..bound),
         );
         let energy_value = rng.random_range(5.0..15.0);
         food_spawn_event.write(FoodSpawnEvent {
