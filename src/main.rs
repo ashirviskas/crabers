@@ -37,6 +37,9 @@ const VISION_UPDATE_RATE: f32 = 0.01;
 #[derive(Resource, Default)]
 struct DebugVisionEnabled(bool);
 
+#[derive(Component)]
+struct SelectionRing;
+
 #[cfg(target_arch = "wasm32")]
 const ENABLE_LEFT_MOUSE_BUTTON_DRAG: bool = true;
 
@@ -76,6 +79,7 @@ fn main() {
         .add_message::<FoodSpawnEvent>()
         .add_systems(Startup, setup)
         .add_systems(Update, entity_selection)
+        .add_systems(Update, highlight_selected_entity.after(entity_selection))
         .add_systems(Update, update_selected_entity_info)
         .add_systems(Update, update_debug_info)
         .add_systems(EguiPrimaryContextPass, egui_ui)
@@ -486,6 +490,38 @@ fn entity_selection(
             }
         }
     }
+}
+
+fn highlight_selected_entity(
+    mut commands: Commands,
+    selected: Res<SelectedEntity>,
+    mut prev_selected: Local<Option<Entity>>,
+    ring_query: Query<Entity, With<SelectionRing>>,
+    mut meshes: ResMut<Assets<Mesh>>,
+    mut materials: ResMut<Assets<ColorMaterial>>,
+) {
+    if selected.entity == *prev_selected {
+        return;
+    }
+    // Despawn old ring(s)
+    for ring in ring_query.iter() {
+        commands.entity(ring).despawn();
+    }
+    // Spawn new ring as child of selected entity
+    if let Some(entity) = selected.entity {
+        let ring = commands
+            .spawn((
+                Mesh2d(meshes.add(Circle::new(CRABER_SIZE))),
+                MeshMaterial2d(materials.add(ColorMaterial::from(
+                    Color::srgba(1.0, 1.0, 0.0, 0.35),
+                ))),
+                Transform::from_translation(Vec3::new(0.0, 0.0, -0.1)),
+                SelectionRing,
+            ))
+            .id();
+        commands.entity(entity).add_child(ring);
+    }
+    *prev_selected = selected.entity;
 }
 
 fn window_to_world(
@@ -949,6 +985,7 @@ pub fn brain_update(
             BRAIN_TICK_MIN_RATE + modify_output * (BRAIN_TICK_MAX_RATE - BRAIN_TICK_MIN_RATE);
 
         accumulator.0 += effective_rate * dt;
+        age.0 += dt; // Track real elapsed time, independent of brain tick rate
         if accumulator.0 < 1.0 {
             continue;
         }
@@ -1014,9 +1051,6 @@ pub fn brain_update(
                 brain.update_input(NeuronType::NearestWallDistance, 0.0);
             }
         }
-        // Tick age
-        age.0 += dt;
-
         // Feed health/energy/age inputs (normalized 0-1)
         brain.update_input(NeuronType::CraberHealth, health.health / health.max_health);
         brain.update_input(NeuronType::CraberEnergy, energy.energy / energy.max_energy);
