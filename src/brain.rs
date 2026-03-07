@@ -353,11 +353,11 @@ impl Brain {
                 bias: 0.0,
                 enabled: true,
             },
-            // AlwaysOn -> WantSexualReproduction (always on: 1.0 * 1.5 = 1.5 >= 1.0)
+            // AlwaysOn -> WantSexualReproduction (1.0 * 0.9 = 0.9, in fallback range)
             Connection {
                 from_id: 0,
                 to_id: 208,
-                weight: 1.5,
+                weight: 0.9,
                 bias: 0.0,
                 enabled: true,
             },

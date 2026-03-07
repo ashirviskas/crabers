@@ -272,8 +272,14 @@ fn record_simulation_stats(
         let deaths = stats.death_counter as f64;
         push_sample(&mut stats.birth_rate_history, cap, elapsed, births);
         push_sample(&mut stats.death_rate_history, cap, elapsed, deaths);
+        let sexual_births = stats.sexual_birth_counter as f64;
+        let asexual_births = stats.asexual_birth_counter as f64;
+        push_sample(&mut stats.sexual_birth_rate_history, cap, elapsed, sexual_births);
+        push_sample(&mut stats.asexual_birth_rate_history, cap, elapsed, asexual_births);
         stats.birth_counter = 0;
         stats.death_counter = 0;
+        stats.sexual_birth_counter = 0;
+        stats.asexual_birth_counter = 0;
     }
 }
 
@@ -384,6 +390,12 @@ fn egui_charts(
             plot_lines(ui, "birth_death_rate", &[
                 ("Births", &stats.birth_rate_history),
                 ("Deaths", &stats.death_rate_history),
+            ]);
+            ui.separator();
+            ui.label("Sexual vs Asexual Births");
+            plot_lines(ui, "birth_type_rate", &[
+                ("Sexual", &stats.sexual_birth_rate_history),
+                ("Asexual", &stats.asexual_birth_rate_history),
             ]);
         });
 }

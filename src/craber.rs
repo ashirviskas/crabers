@@ -111,14 +111,15 @@ pub struct ReproduceEvent {
 
 #[derive(Message)]
 pub struct SexualReproduceRequestEvent {
-    pub entity: Entity,
+    pub bearer: Entity,
     pub generation: Generation,
+    pub want_sex: f32,
 }
 
 #[derive(Message)]
 pub struct SexualReproduceEvent {
-    pub initiator: Entity,
-    pub partner: Entity,
+    pub bearer: Entity,
+    pub mate: Entity,
     pub generation: Generation,
 }
 
@@ -403,14 +404,14 @@ pub fn energy_consumption(
                 let new_generation = Generation {
                     generation_id: generation.generation_id + 1,
                 };
-                if brain.get_want_sexual_reproduction() >= 1.0 {
-                    // Sexual reproduction: request a partner
+                let want_sex = brain.get_want_sexual_reproduction();
+                if want_sex >= 0.5 {
                     sexual_request_events.write(SexualReproduceRequestEvent {
-                        entity,
+                        bearer: entity,
                         generation: new_generation,
+                        want_sex,
                     });
                 } else {
-                    // Asexual reproduction
                     reproduce_events.write(ReproduceEvent {
                         entity,
                         generation: new_generation,
@@ -432,37 +433,50 @@ pub fn match_sexual_partners(
     vision_query: Query<&Vision>,
     brain_query: Query<&Brain>,
     mut sexual_reproduce_events: MessageWriter<SexualReproduceEvent>,
+    mut reproduce_events: MessageWriter<ReproduceEvent>,
 ) {
     for event in sexual_request_events.read() {
-        let Ok((children, _initiator_brain)) = craber_query.get(event.entity) else {
+        let Ok((children, _bearer_brain)) = craber_query.get(event.bearer) else {
             continue;
         };
         // Find the vision child to get entities in range
-        let mut found_partner = false;
+        let mut found_mate = false;
         for child in children.iter() {
             let Ok(vision) = vision_query.get(child) else {
                 continue;
             };
             for &visible_entity in &vision.entities_in_vision {
-                if visible_entity == event.entity {
+                if visible_entity == event.bearer {
                     continue;
                 }
-                if let Ok(partner_brain) = brain_query.get(visible_entity) {
-                    if partner_brain.get_want_sexual_reproduction() >= 1.0 {
+                if let Ok(mate_brain) = brain_query.get(visible_entity) {
+                    if mate_brain.get_want_sexual_reproduction() >= 0.5 {
                         sexual_reproduce_events.write(SexualReproduceEvent {
-                            initiator: event.entity,
-                            partner: visible_entity,
+                            bearer: event.bearer,
+                            mate: visible_entity,
                             generation: Generation {
                                 generation_id: event.generation.generation_id,
                             },
                         });
-                        found_partner = true;
+                        found_mate = true;
                         break;
                     }
                 }
             }
-            if found_partner {
+            if found_mate {
                 break;
+            }
+        }
+        // Probabilistic fallback: the higher want_sex, the less likely we fall back
+        if !found_mate {
+            let fallback_chance = ((1.0 - event.want_sex) / 0.5).clamp(0.0, 1.0);
+            if rand::rng().random_range(0.0..1.0) < fallback_chance {
+                reproduce_events.write(ReproduceEvent {
+                    entity: event.bearer,
+                    generation: Generation {
+                        generation_id: event.generation.generation_id,
+                    },
+                });
             }
         }
     }
@@ -475,15 +489,15 @@ pub fn craber_sexual_reproduce(
     mut stats: ResMut<SimulationStats>,
 ) {
     for event in sexual_reproduce_events.read() {
-        // Get partner brain first (immutable borrow)
-        let partner_brain = if let Ok((_, brain, _, _, _)) = craber_query.get(event.partner) {
+        // Get mate brain first (immutable borrow)
+        let mate_brain = if let Ok((_, brain, _, _, _)) = craber_query.get(event.mate) {
             brain.clone()
         } else {
             continue;
         };
 
-        // Now get initiator (mutable borrow)
-        let Ok((transform, brain, mut energy, mut last_reproduced, mut children_count)) = craber_query.get_mut(event.initiator) else {
+        // Now get bearer (mutable borrow)
+        let Ok((transform, brain, mut energy, mut last_reproduced, mut children_count)) = craber_query.get_mut(event.bearer) else {
             continue;
         };
         if energy.energy < CRABER_REPRODUCE_ENERGY {
@@ -494,7 +508,7 @@ pub fn craber_sexual_reproduce(
         children_count.0 += 1;
 
         let child_brain = brain.crossover_brain(
-            &partner_brain,
+            &mate_brain,
             CRABER_MUTATION_CHANCE,
             CRABER_MUTATION_AMOUNT,
             CRABER_MUTATION_CHANCE,
@@ -522,6 +536,7 @@ pub fn craber_sexual_reproduce(
             },
         });
         stats.birth_counter += 1;
+        stats.sexual_birth_counter += 1;
     }
 }
 
@@ -572,6 +587,7 @@ pub fn craber_reproduce(
                 },
             });
             stats.birth_counter += 1;
+            stats.asexual_birth_counter += 1;
         }
     }
 }
