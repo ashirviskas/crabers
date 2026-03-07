@@ -4,7 +4,11 @@ use rand::seq::IndexedRandom;
 
 /// Clamp that maps NaN/Inf to 0.0 instead of propagating.
 fn finite_clamp(v: f32, min: f32, max: f32) -> f32 {
-    if v.is_finite() { v.clamp(min, max) } else { 0.0 }
+    if v.is_finite() {
+        v.clamp(min, max)
+    } else {
+        0.0
+    }
 }
 
 const CRABER_MAX_WANT_TO_ATTACK: f32 = 10.;
@@ -296,7 +300,7 @@ impl Brain {
             Connection {
                 from_id: 0,
                 to_id: 204,
-                weight: 0.5,
+                weight: 0.2,
                 bias: 0.0,
                 enabled: true,
             },
@@ -533,9 +537,16 @@ impl Brain {
         let mut outputs = Vec::new();
         for neuron in self.outputs.iter() {
             output_types_seen.insert(neuron.neuron_type);
-            let other_neuron = other.outputs.iter().find(|n| n.neuron_type == neuron.neuron_type);
+            let other_neuron = other
+                .outputs
+                .iter()
+                .find(|n| n.neuron_type == neuron.neuron_type);
             let activation = if let Some(on) = other_neuron {
-                if rng.random_range(0.0..1.0) < 0.5 { neuron.activation_function } else { on.activation_function }
+                if rng.random_range(0.0..1.0) < 0.5 {
+                    neuron.activation_function
+                } else {
+                    on.activation_function
+                }
             } else {
                 neuron.activation_function
             };
@@ -577,7 +588,11 @@ impl Brain {
             } else if id < 200 {
                 // Hidden neuron — keep index if within bounds
                 let idx = id - 100;
-                if idx < hidden_layers.len() { Some(id) } else { None }
+                if idx < hidden_layers.len() {
+                    Some(id)
+                } else {
+                    None
+                }
             } else {
                 // Output neuron — remap by type
                 let idx = id - 200;
@@ -592,30 +607,41 @@ impl Brain {
         // Collect parent A connections (remapped)
         let mut a_conns: Vec<(ConnKey, Connection)> = Vec::new();
         for conn in &self.connections {
-            if let (Some(new_from), Some(new_to)) = (remap_id(conn.from_id, self), remap_id(conn.to_id, self)) {
+            if let (Some(new_from), Some(new_to)) =
+                (remap_id(conn.from_id, self), remap_id(conn.to_id, self))
+            {
                 let key = (new_from, new_to);
-                a_conns.push((key, Connection {
-                    from_id: new_from,
-                    to_id: new_to,
-                    weight: conn.weight,
-                    bias: conn.bias,
-                    enabled: conn.enabled,
-                }));
+                a_conns.push((
+                    key,
+                    Connection {
+                        from_id: new_from,
+                        to_id: new_to,
+                        weight: conn.weight,
+                        bias: conn.bias,
+                        enabled: conn.enabled,
+                    },
+                ));
             }
         }
 
         // Collect parent B connections (remapped)
-        let mut b_conn_map: std::collections::HashMap<ConnKey, Connection> = std::collections::HashMap::new();
+        let mut b_conn_map: std::collections::HashMap<ConnKey, Connection> =
+            std::collections::HashMap::new();
         for conn in &other.connections {
-            if let (Some(new_from), Some(new_to)) = (remap_id(conn.from_id, other), remap_id(conn.to_id, other)) {
+            if let (Some(new_from), Some(new_to)) =
+                (remap_id(conn.from_id, other), remap_id(conn.to_id, other))
+            {
                 let key = (new_from, new_to);
-                b_conn_map.insert(key, Connection {
-                    from_id: new_from,
-                    to_id: new_to,
-                    weight: conn.weight,
-                    bias: conn.bias,
-                    enabled: conn.enabled,
-                });
+                b_conn_map.insert(
+                    key,
+                    Connection {
+                        from_id: new_from,
+                        to_id: new_to,
+                        weight: conn.weight,
+                        bias: conn.bias,
+                        enabled: conn.enabled,
+                    },
+                );
             }
         }
 
@@ -625,7 +651,11 @@ impl Brain {
             seen_keys.insert(*key);
             if let Some(b_conn) = b_conn_map.get(key) {
                 // Shared: 50/50 pick
-                let conn = if rng.random_range(0.0..1.0) < 0.5 { a_conn } else { b_conn };
+                let conn = if rng.random_range(0.0..1.0) < 0.5 {
+                    a_conn
+                } else {
+                    b_conn
+                };
                 connections.push(conn.clone());
             } else {
                 connections.push(a_conn.clone());
@@ -652,17 +682,30 @@ impl Brain {
 
     pub fn genetic_closeness(&self, other: &Brain) -> f32 {
         // Structural similarity: Jaccard index of connection keys
-        let self_keys: std::collections::HashSet<(usize, usize)> = self.connections.iter()
-            .map(|c| (c.from_id, c.to_id)).collect();
-        let other_keys: std::collections::HashSet<(usize, usize)> = other.connections.iter()
-            .map(|c| (c.from_id, c.to_id)).collect();
+        let self_keys: std::collections::HashSet<(usize, usize)> = self
+            .connections
+            .iter()
+            .map(|c| (c.from_id, c.to_id))
+            .collect();
+        let other_keys: std::collections::HashSet<(usize, usize)> = other
+            .connections
+            .iter()
+            .map(|c| (c.from_id, c.to_id))
+            .collect();
         let intersection = self_keys.intersection(&other_keys).count() as f32;
         let union = self_keys.union(&other_keys).count() as f32;
-        let structural = if union > 0.0 { intersection / union } else { 1.0 };
+        let structural = if union > 0.0 {
+            intersection / union
+        } else {
+            1.0
+        };
 
         // Weight similarity: average 1 - |diff| for shared connections
-        let other_map: std::collections::HashMap<(usize, usize), &Connection> = other.connections.iter()
-            .map(|c| ((c.from_id, c.to_id), c)).collect();
+        let other_map: std::collections::HashMap<(usize, usize), &Connection> = other
+            .connections
+            .iter()
+            .map(|c| ((c.from_id, c.to_id), c))
+            .collect();
         let mut weight_sim_sum = 0.0;
         let mut weight_count = 0;
         for conn in &self.connections {
@@ -671,18 +714,28 @@ impl Brain {
                 weight_count += 1;
             }
         }
-        let weight_sim = if weight_count > 0 { weight_sim_sum / weight_count as f32 } else { 0.0 };
+        let weight_sim = if weight_count > 0 {
+            weight_sim_sum / weight_count as f32
+        } else {
+            0.0
+        };
 
         // Activation similarity: matching activations in hidden layers
         let max_hidden = self.hidden_layers.len().min(other.hidden_layers.len());
         let mut act_match = 0;
         for i in 0..max_hidden {
-            if self.hidden_layers[i].activation_function == other.hidden_layers[i].activation_function {
+            if self.hidden_layers[i].activation_function
+                == other.hidden_layers[i].activation_function
+            {
                 act_match += 1;
             }
         }
         let total_hidden = self.hidden_layers.len().max(other.hidden_layers.len());
-        let activation_sim = if total_hidden > 0 { act_match as f32 / total_hidden as f32 } else { 1.0 };
+        let activation_sim = if total_hidden > 0 {
+            act_match as f32 / total_hidden as f32
+        } else {
+            1.0
+        };
 
         0.5 * structural + 0.3 * weight_sim + 0.2 * activation_sim
     }
@@ -713,8 +766,11 @@ impl Brain {
                     sum += prev[conn.from_id] * conn.weight + conn.bias;
                 }
             }
-            self.hidden_layers[h_idx].value =
-                finite_clamp(self.hidden_layers[h_idx].activation_function.calculate(sum), -1e6, 1e6);
+            self.hidden_layers[h_idx].value = finite_clamp(
+                self.hidden_layers[h_idx].activation_function.calculate(sum),
+                -1e6,
+                1e6,
+            );
         }
 
         // Pull-compute output neurons
@@ -729,7 +785,11 @@ impl Brain {
                     sum += prev[conn.from_id] * conn.weight + conn.bias;
                 }
             }
-            self.outputs[o_idx].value = finite_clamp(self.outputs[o_idx].activation_function.calculate(sum), -1e6, 1e6);
+            self.outputs[o_idx].value = finite_clamp(
+                self.outputs[o_idx].activation_function.calculate(sum),
+                -1e6,
+                1e6,
+            );
         }
     }
 
@@ -954,7 +1014,6 @@ impl Brain {
         mutated_brain
     }
 }
-
 
 #[derive(Component)]
 pub struct Vision {

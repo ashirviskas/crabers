@@ -86,7 +86,7 @@ pub struct ReproduceCooldown {
 impl Default for ReproduceCooldown {
     fn default() -> Self {
         Self {
-            timer: Timer::from_seconds(1.0, TimerMode::Once),
+            timer: Timer::from_seconds(5.0, TimerMode::Once),
         }
     }
 }
@@ -481,8 +481,7 @@ pub fn craber_sexual_reproduce(
 
         // Spawn offspring between the two parents
         let parent_angle = transform.rotation.to_axis_angle().1;
-        let position_offset =
-            Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 5.0;
+        let position_offset = Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 5.0;
         let position = transform.translation + position_offset.extend(0.0);
         let rotation = Quat::from_rotation_z(parent_angle + std::f32::consts::PI);
 
