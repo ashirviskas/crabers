@@ -35,7 +35,8 @@ pub enum NeuronType {
     Rotate,              // Angular impulse direction (tanh, -1 to +1)
     RotateRate,          // How often rotation impulses fire (ReLU, 0+)
     ModifyBrainInterval, // TODO
-    WantToMate,
+    WantToReproduce,
+    WantSexualReproduction,
     WantToAttack,
     WantToDefend,
 }
@@ -70,7 +71,8 @@ impl NeuronType {
             NeuronType::Rotate,
             NeuronType::RotateRate,
             NeuronType::ModifyBrainInterval,
-            NeuronType::WantToMate,
+            NeuronType::WantToReproduce,
+            NeuronType::WantSexualReproduction,
         ];
         let mut rng = rand::rng();
         *output_types.choose(&mut rng).unwrap()
@@ -225,6 +227,16 @@ impl Brain {
                 activation_function: ActivationFunction::ReLU,
                 value: 0.0,
             },
+            Neuron {
+                neuron_type: NeuronType::WantToReproduce,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
+            Neuron {
+                neuron_type: NeuronType::WantSexualReproduction,
+                activation_function: ActivationFunction::None,
+                value: 0.0,
+            },
         ];
         let hidden_layers = vec![Neuron {
             neuron_type: NeuronType::Hidden,
@@ -293,6 +305,22 @@ impl Brain {
                 from_id: 0,
                 to_id: 206,
                 weight: 0.5,
+                bias: 0.0,
+                enabled: true,
+            },
+            // AlwaysOn -> WantToReproduce (always on: 1.0 * 1.5 = 1.5 >= 1.0)
+            Connection {
+                from_id: 0,
+                to_id: 207,
+                weight: 1.5,
+                bias: 0.0,
+                enabled: true,
+            },
+            // AlwaysOn -> WantSexualReproduction (always on: 1.0 * 1.5 = 1.5 >= 1.0)
+            Connection {
+                from_id: 0,
+                to_id: 208,
+                weight: 1.5,
                 bias: 0.0,
                 enabled: true,
             },
@@ -423,6 +451,240 @@ impl Brain {
             }
         }
         0.0
+    }
+
+    pub fn get_want_to_reproduce(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::WantToReproduce {
+                return neuron.value;
+            }
+        }
+        0.0
+    }
+
+    pub fn get_want_sexual_reproduction(&self) -> f32 {
+        for neuron in self.outputs.iter() {
+            if neuron.neuron_type == NeuronType::WantSexualReproduction {
+                return neuron.value;
+            }
+        }
+        0.0
+    }
+
+    pub fn crossover_brain(
+        &self,
+        other: &Brain,
+        mutation_chance: f32,
+        mutation_amount: f32,
+        insertion_chance: f32,
+    ) -> Brain {
+        let mut rng = rand::rng();
+
+        // Inputs: union of both parents' input types
+        let mut input_types_seen = std::collections::HashSet::new();
+        let mut inputs = Vec::new();
+        for neuron in self.inputs.iter().chain(other.inputs.iter()) {
+            if input_types_seen.insert(neuron.neuron_type) {
+                inputs.push(*neuron);
+            }
+        }
+
+        // Hidden: align by index, 50/50 pick activation
+        let max_hidden = self.hidden_layers.len().max(other.hidden_layers.len());
+        let mut hidden_layers = Vec::new();
+        for i in 0..max_hidden {
+            let a = self.hidden_layers.get(i);
+            let b = other.hidden_layers.get(i);
+            match (a, b) {
+                (Some(na), Some(nb)) => {
+                    let activation = if rng.random_range(0.0..1.0) < 0.5 {
+                        na.activation_function
+                    } else {
+                        nb.activation_function
+                    };
+                    hidden_layers.push(Neuron {
+                        neuron_type: NeuronType::Hidden,
+                        activation_function: activation,
+                        value: 0.0,
+                    });
+                }
+                (Some(n), None) | (None, Some(n)) => {
+                    if rng.random_range(0.0..1.0) < 0.5 {
+                        hidden_layers.push(Neuron {
+                            neuron_type: NeuronType::Hidden,
+                            activation_function: n.activation_function,
+                            value: 0.0,
+                        });
+                    }
+                }
+                (None, None) => {}
+            }
+        }
+        if hidden_layers.is_empty() {
+            hidden_layers.push(Neuron {
+                neuron_type: NeuronType::Hidden,
+                activation_function: ActivationFunction::Sin,
+                value: 0.0,
+            });
+        }
+
+        // Outputs: union of both parents' output types; shared types → 50/50 pick activation
+        let mut output_types_seen = std::collections::HashSet::new();
+        let mut outputs = Vec::new();
+        for neuron in self.outputs.iter() {
+            output_types_seen.insert(neuron.neuron_type);
+            let other_neuron = other.outputs.iter().find(|n| n.neuron_type == neuron.neuron_type);
+            let activation = if let Some(on) = other_neuron {
+                if rng.random_range(0.0..1.0) < 0.5 { neuron.activation_function } else { on.activation_function }
+            } else {
+                neuron.activation_function
+            };
+            outputs.push(Neuron {
+                neuron_type: neuron.neuron_type,
+                activation_function: activation,
+                value: 0.0,
+            });
+        }
+        for neuron in other.outputs.iter() {
+            if !output_types_seen.contains(&neuron.neuron_type) {
+                output_types_seen.insert(neuron.neuron_type);
+                outputs.push(Neuron {
+                    neuron_type: neuron.neuron_type,
+                    activation_function: neuron.activation_function,
+                    value: 0.0,
+                });
+            }
+        }
+
+        // Build neuron type→index maps for remapping connections
+        let input_type_to_idx: std::collections::HashMap<NeuronType, usize> = inputs
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.neuron_type, i))
+            .collect();
+        let output_type_to_idx: std::collections::HashMap<NeuronType, usize> = outputs
+            .iter()
+            .enumerate()
+            .map(|(i, n)| (n.neuron_type, i + 200))
+            .collect();
+
+        // Helper to remap a neuron ID from a parent brain to the child brain
+        let remap_id = |id: usize, parent: &Brain| -> Option<usize> {
+            if id < 100 {
+                // Input neuron — remap by type
+                let neuron_type = parent.inputs.get(id)?.neuron_type;
+                input_type_to_idx.get(&neuron_type).copied()
+            } else if id < 200 {
+                // Hidden neuron — keep index if within bounds
+                let idx = id - 100;
+                if idx < hidden_layers.len() { Some(id) } else { None }
+            } else {
+                // Output neuron — remap by type
+                let idx = id - 200;
+                let neuron_type = parent.outputs.get(idx)?.neuron_type;
+                output_type_to_idx.get(&neuron_type).copied()
+            }
+        };
+
+        // Connections: match by (from_type, to_type); shared → 50/50 pick weight+bias
+        type ConnKey = (usize, usize); // (from_neuron_type_hash, to_neuron_type_hash)
+
+        // Collect parent A connections (remapped)
+        let mut a_conns: Vec<(ConnKey, Connection)> = Vec::new();
+        for conn in &self.connections {
+            if let (Some(new_from), Some(new_to)) = (remap_id(conn.from_id, self), remap_id(conn.to_id, self)) {
+                let key = (new_from, new_to);
+                a_conns.push((key, Connection {
+                    from_id: new_from,
+                    to_id: new_to,
+                    weight: conn.weight,
+                    bias: conn.bias,
+                    enabled: conn.enabled,
+                }));
+            }
+        }
+
+        // Collect parent B connections (remapped)
+        let mut b_conn_map: std::collections::HashMap<ConnKey, Connection> = std::collections::HashMap::new();
+        for conn in &other.connections {
+            if let (Some(new_from), Some(new_to)) = (remap_id(conn.from_id, other), remap_id(conn.to_id, other)) {
+                let key = (new_from, new_to);
+                b_conn_map.insert(key, Connection {
+                    from_id: new_from,
+                    to_id: new_to,
+                    weight: conn.weight,
+                    bias: conn.bias,
+                    enabled: conn.enabled,
+                });
+            }
+        }
+
+        let mut connections = Vec::new();
+        let mut seen_keys = std::collections::HashSet::new();
+        for (key, a_conn) in &a_conns {
+            seen_keys.insert(*key);
+            if let Some(b_conn) = b_conn_map.get(key) {
+                // Shared: 50/50 pick
+                let conn = if rng.random_range(0.0..1.0) < 0.5 { a_conn } else { b_conn };
+                connections.push(conn.clone());
+            } else {
+                connections.push(a_conn.clone());
+            }
+        }
+        for (key, b_conn) in &b_conn_map {
+            if !seen_keys.contains(key) {
+                if rng.random_range(0.0..1.0) < 0.5 {
+                    connections.push(b_conn.clone());
+                }
+            }
+        }
+
+        let child = Brain {
+            inputs,
+            outputs,
+            hidden_layers,
+            connections,
+        };
+
+        // Apply standard mutation on the crossover result
+        child.new_mutated_brain(mutation_chance, mutation_amount, insertion_chance, 0.0)
+    }
+
+    pub fn genetic_closeness(&self, other: &Brain) -> f32 {
+        // Structural similarity: Jaccard index of connection keys
+        let self_keys: std::collections::HashSet<(usize, usize)> = self.connections.iter()
+            .map(|c| (c.from_id, c.to_id)).collect();
+        let other_keys: std::collections::HashSet<(usize, usize)> = other.connections.iter()
+            .map(|c| (c.from_id, c.to_id)).collect();
+        let intersection = self_keys.intersection(&other_keys).count() as f32;
+        let union = self_keys.union(&other_keys).count() as f32;
+        let structural = if union > 0.0 { intersection / union } else { 1.0 };
+
+        // Weight similarity: average 1 - |diff| for shared connections
+        let other_map: std::collections::HashMap<(usize, usize), &Connection> = other.connections.iter()
+            .map(|c| ((c.from_id, c.to_id), c)).collect();
+        let mut weight_sim_sum = 0.0;
+        let mut weight_count = 0;
+        for conn in &self.connections {
+            if let Some(oc) = other_map.get(&(conn.from_id, conn.to_id)) {
+                weight_sim_sum += 1.0 - (conn.weight - oc.weight).abs().min(2.0) / 2.0;
+                weight_count += 1;
+            }
+        }
+        let weight_sim = if weight_count > 0 { weight_sim_sum / weight_count as f32 } else { 0.0 };
+
+        // Activation similarity: matching activations in hidden layers
+        let max_hidden = self.hidden_layers.len().min(other.hidden_layers.len());
+        let mut act_match = 0;
+        for i in 0..max_hidden {
+            if self.hidden_layers[i].activation_function == other.hidden_layers[i].activation_function {
+                act_match += 1;
+            }
+        }
+        let total_hidden = self.hidden_layers.len().max(other.hidden_layers.len());
+        let activation_sim = if total_hidden > 0 { act_match as f32 / total_hidden as f32 } else { 1.0 };
+
+        0.5 * structural + 0.3 * weight_sim + 0.2 * activation_sim
     }
 
     pub fn feed_forward(&mut self) {

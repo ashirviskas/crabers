@@ -69,7 +69,8 @@ fn neuron_label(neuron_type: NeuronType) -> &'static str {
         NeuronType::Rotate => "ROT",
         NeuronType::RotateRate => "R.RT",
         NeuronType::ModifyBrainInterval => "M.INT",
-        NeuronType::WantToMate => "MATE",
+        NeuronType::WantToReproduce => "REPR",
+        NeuronType::WantSexualReproduction => "SEX",
         NeuronType::WantToAttack => "ATK",
         NeuronType::WantToDefend => "DEF",
     }

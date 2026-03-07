@@ -76,9 +76,9 @@ Building a WASM build:
 - [x] Basic environment setup with food source spawning.
 - [ ] Basic growing and maturity system for crabers.
 - [x] Simple reproduction mechanics without advanced features.
-- [ ] Sexual reproduction
-  - [ ] Brain modifications
-  - [ ] Reproduction modifications
+- [x] Sexual reproduction
+  - [x] Brain modifications (crossover, WantToReproduce/WantSexualReproduction neurons)
+  - [x] Reproduction modifications (neural-gated asexual/sexual modes)
 - [x] Simple evolution/mutation system
   - [x] Brain mutations
   - [ ] Other craber qualities mutations
