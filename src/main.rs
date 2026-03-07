@@ -225,34 +225,65 @@ fn record_simulation_stats(
         push_sample(&mut stats.craber_history, cap, elapsed, debug_info.craber_count as f64);
         push_sample(&mut stats.food_history, cap, elapsed, debug_info.food_count as f64);
 
-        // Compute craber metrics
-        let mut total_age = 0.0_f64;
-        let mut max_age = 0.0_f64;
-        let mut total_gen = 0.0_f64;
-        let mut max_gen = 0.0_f64;
-        let mut total_energy = 0.0_f64;
-        let mut total_health = 0.0_f64;
-        let mut count = 0_u32;
+        // Collect craber metrics into vecs for quantile computation
+        let mut ages = Vec::new();
+        let mut gens = Vec::new();
+        let mut energies = Vec::new();
+        let mut healths = Vec::new();
 
         for (age, generation, energy, health) in craber_query.iter() {
-            let a = age.0 as f64;
-            let g = generation.generation_id as f64;
-            total_age += a;
-            if a > max_age { max_age = a; }
-            total_gen += g;
-            if g > max_gen { max_gen = g; }
-            total_energy += energy.energy as f64;
-            total_health += health.health as f64;
-            count += 1;
+            ages.push(age.0 as f64);
+            gens.push(generation.generation_id as f64);
+            energies.push(energy.energy as f64);
+            healths.push(health.health as f64);
         }
 
-        let divisor = count.max(1) as f64;
+        ages.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        gens.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        energies.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        healths.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+
+        let len = ages.len();
+        let divisor = len.max(1) as f64;
+
+        let total_age: f64 = ages.iter().sum();
+        let max_age = ages.last().copied().unwrap_or(0.0);
+        let min_age = ages.first().copied().unwrap_or(0.0);
+        let total_gen: f64 = gens.iter().sum();
+        let max_gen = gens.last().copied().unwrap_or(0.0);
+        let min_gen = gens.first().copied().unwrap_or(0.0);
+        let total_energy: f64 = energies.iter().sum();
+        let total_health: f64 = healths.iter().sum();
+
+        let quantile = |v: &[f64], q: f64| -> f64 {
+            if v.is_empty() { return 0.0; }
+            let idx = ((v.len() as f64 - 1.0) * q) as usize;
+            v[idx.min(v.len() - 1)]
+        };
+
         push_sample(&mut stats.avg_age_history, cap, elapsed, total_age / divisor);
         push_sample(&mut stats.max_age_history, cap, elapsed, max_age);
+        push_sample(&mut stats.min_age_history, cap, elapsed, min_age);
+        push_sample(&mut stats.median_age_history, cap, elapsed, quantile(&ages, 0.5));
+        push_sample(&mut stats.p25_age_history, cap, elapsed, quantile(&ages, 0.25));
+        push_sample(&mut stats.p75_age_history, cap, elapsed, quantile(&ages, 0.75));
+
         push_sample(&mut stats.avg_generation_history, cap, elapsed, total_gen / divisor);
         push_sample(&mut stats.max_generation_history, cap, elapsed, max_gen);
+        push_sample(&mut stats.min_generation_history, cap, elapsed, min_gen);
+        push_sample(&mut stats.median_generation_history, cap, elapsed, quantile(&gens, 0.5));
+        push_sample(&mut stats.p25_generation_history, cap, elapsed, quantile(&gens, 0.25));
+        push_sample(&mut stats.p75_generation_history, cap, elapsed, quantile(&gens, 0.75));
+
         push_sample(&mut stats.avg_energy_history, cap, elapsed, total_energy / divisor);
+        push_sample(&mut stats.median_energy_history, cap, elapsed, quantile(&energies, 0.5));
+        push_sample(&mut stats.p25_energy_history, cap, elapsed, quantile(&energies, 0.25));
+        push_sample(&mut stats.p75_energy_history, cap, elapsed, quantile(&energies, 0.75));
+
         push_sample(&mut stats.avg_health_history, cap, elapsed, total_health / divisor);
+        push_sample(&mut stats.median_health_history, cap, elapsed, quantile(&healths, 0.5));
+        push_sample(&mut stats.p25_health_history, cap, elapsed, quantile(&healths, 0.25));
+        push_sample(&mut stats.p75_health_history, cap, elapsed, quantile(&healths, 0.75));
 
         // Brain complexity
         let mut total_hidden = 0_u64;
@@ -343,9 +374,20 @@ fn egui_charts(
         .default_open(false)
         .frame(transparent_frame)
         .show(ctx, |ui| {
-            plot_lines(ui, "vitals", &[
+            ui.label("Energy");
+            plot_lines(ui, "energy", &[
                 ("Avg Energy", &stats.avg_energy_history),
+                ("Median Energy", &stats.median_energy_history),
+                ("P25 Energy", &stats.p25_energy_history),
+                ("P75 Energy", &stats.p75_energy_history),
+            ]);
+            ui.separator();
+            ui.label("Health");
+            plot_lines(ui, "health", &[
                 ("Avg Health", &stats.avg_health_history),
+                ("Median Health", &stats.median_health_history),
+                ("P25 Health", &stats.p25_health_history),
+                ("P75 Health", &stats.p75_health_history),
             ]);
         });
 
@@ -362,12 +404,20 @@ fn egui_charts(
             plot_lines(ui, "age", &[
                 ("Avg Age", &stats.avg_age_history),
                 ("Max Age", &stats.max_age_history),
+                ("Median Age", &stats.median_age_history),
+                ("Min Age", &stats.min_age_history),
+                ("P25 Age", &stats.p25_age_history),
+                ("P75 Age", &stats.p75_age_history),
             ]);
             ui.separator();
             ui.label("Generation");
             plot_lines(ui, "generation", &[
                 ("Avg Generation", &stats.avg_generation_history),
                 ("Max Generation", &stats.max_generation_history),
+                ("Median Generation", &stats.median_generation_history),
+                ("Min Generation", &stats.min_generation_history),
+                ("P25 Generation", &stats.p25_generation_history),
+                ("P75 Generation", &stats.p75_generation_history),
             ]);
         });
 
