@@ -18,7 +18,7 @@ pub enum NeuronType {
     // Input
     AlwaysOn,
     CraberHealth,
-    CraberSpeed,  // TODO
+    CraberSpeed, // TODO
     CraberEnergy,
     CraberAge,
 
@@ -28,11 +28,11 @@ pub enum NeuronType {
     NearestCraberAngle,    // TODO
     NearestCraberDistance, // TODO
 
-    NearestWallAngle,    // TODO
-    NearestWallDistance, // TODO
+    NearestWallAngle,              // TODO
+    NearestWallDistance,           // TODO
     NearestCraberGeneticCloseness, // Genetic closeness to nearest visible craber (0-1)
     // Interval between each update. TODO: Add cost for higher intervals.
-    BrainInterval, // TODO
+    BrainInterval,  // TODO
     LastReproduced, // Decay-based: 1.0 after reproduction, decays toward 0
     // Hidden
     Hidden,
@@ -357,7 +357,7 @@ impl Brain {
             Connection {
                 from_id: 0,
                 to_id: 208,
-                weight: 0.9,
+                weight: 0.98,
                 bias: 0.0,
                 enabled: true,
             },

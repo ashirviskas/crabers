@@ -4,8 +4,10 @@
 This project is a physics-based simulation developed in Bevy, focused on the evolution of virtual creatures called "crabers". These crabers live in a 2D space and evolve over time through natural selection and genetic mutation.
 
 Run it now in your browser: [Here](https://ashirviskas.github.io/)
+<!-- 
+![image](https://github.com/ashirviskas/crabers/assets/11985242/305bbd40-010a-4609-90fa-cf8abb4da18a) -->
 
-![image](https://github.com/ashirviskas/crabers/assets/11985242/305bbd40-010a-4609-90fa-cf8abb4da18a)
+![alt text](assets/image-1.png)
 
 
 
@@ -105,6 +107,9 @@ Building a WASM build:
   - [x] Bite/Attack
   - [ ] Defend
 - [x] Drop food when die
+- [ ] Global energy system so that food does not spawn out of nowhere. Avoids infinite population growth
+- Make food nicer
+  - [ ] Procedurally generated food looks
 - [ ] More complex brain
   - [ ] Ability to enable/disable connections
   - [ ] Brain costs energy (neurons, inputs, connections cost passively, each feed forward - actively)
