@@ -7,7 +7,7 @@ Run it now in your browser: [Here](https://ashirviskas.github.io/)
 <!-- 
 ![image](https://github.com/ashirviskas/crabers/assets/11985242/305bbd40-010a-4609-90fa-cf8abb4da18a) -->
 
-![alt text](assets/image-1.png)
+![image](assets/image-1.png)
 
 
 
