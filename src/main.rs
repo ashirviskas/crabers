@@ -295,17 +295,29 @@ fn record_simulation_stats(
         push_sample(&mut stats.p75_children_history, cap, elapsed, quantile(&children, 0.75));
 
         // Brain complexity
-        let mut total_hidden = 0_u64;
-        let mut total_connections = 0_u64;
-        let mut brain_count = 0_u32;
+        let mut hidden_neurons = Vec::new();
+        let mut connections = Vec::new();
         for brain in brain_query.iter() {
-            total_hidden += brain.hidden_layers.len() as u64;
-            total_connections += brain.connections.len() as u64;
-            brain_count += 1;
+            hidden_neurons.push(brain.hidden_layers.len() as f64);
+            connections.push(brain.connections.len() as f64);
         }
-        let brain_divisor = brain_count.max(1) as f64;
-        push_sample(&mut stats.avg_hidden_neurons_history, cap, elapsed, total_hidden as f64 / brain_divisor);
-        push_sample(&mut stats.avg_connections_history, cap, elapsed, total_connections as f64 / brain_divisor);
+        hidden_neurons.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        connections.sort_unstable_by(|a, b| a.partial_cmp(b).unwrap());
+        let brain_divisor = hidden_neurons.len().max(1) as f64;
+        let total_hidden: f64 = hidden_neurons.iter().sum();
+        let total_connections: f64 = connections.iter().sum();
+
+        push_sample(&mut stats.avg_hidden_neurons_history, cap, elapsed, total_hidden / brain_divisor);
+        push_sample(&mut stats.max_hidden_neurons_history, cap, elapsed, hidden_neurons.last().copied().unwrap_or(0.0));
+        push_sample(&mut stats.median_hidden_neurons_history, cap, elapsed, quantile(&hidden_neurons, 0.5));
+        push_sample(&mut stats.p25_hidden_neurons_history, cap, elapsed, quantile(&hidden_neurons, 0.25));
+        push_sample(&mut stats.p75_hidden_neurons_history, cap, elapsed, quantile(&hidden_neurons, 0.75));
+
+        push_sample(&mut stats.avg_connections_history, cap, elapsed, total_connections / brain_divisor);
+        push_sample(&mut stats.max_connections_history, cap, elapsed, connections.last().copied().unwrap_or(0.0));
+        push_sample(&mut stats.median_connections_history, cap, elapsed, quantile(&connections, 0.5));
+        push_sample(&mut stats.p25_connections_history, cap, elapsed, quantile(&connections, 0.25));
+        push_sample(&mut stats.p75_connections_history, cap, elapsed, quantile(&connections, 0.75));
 
         // Birth/death rates (counts since last sample)
         let births = stats.birth_counter as f64;
@@ -439,8 +451,8 @@ fn egui_charts(
             ]);
         });
 
-    // Complexity & Rates window
-    egui::Window::new("Complexity & Rates")
+    // Brain Complexity window
+    egui::Window::new("Brain Complexity")
         .default_pos([10.0, 610.0])
         .default_size([300.0, 200.0])
         .resizable(true)
@@ -448,12 +460,34 @@ fn egui_charts(
         .default_open(false)
         .frame(transparent_frame)
         .show(ctx, |ui| {
-            ui.label("Brain Complexity");
-            plot_lines(ui, "brain_complexity", &[
+            ui.label("Hidden Neurons");
+            plot_lines(ui, "hidden_neurons", &[
                 ("Avg Hidden Neurons", &stats.avg_hidden_neurons_history),
-                ("Avg Connections", &stats.avg_connections_history),
+                ("Max Hidden Neurons", &stats.max_hidden_neurons_history),
+                ("Median Hidden Neurons", &stats.median_hidden_neurons_history),
+                ("P25 Hidden Neurons", &stats.p25_hidden_neurons_history),
+                ("P75 Hidden Neurons", &stats.p75_hidden_neurons_history),
             ]);
             ui.separator();
+            ui.label("Connections");
+            plot_lines(ui, "connections", &[
+                ("Avg Connections", &stats.avg_connections_history),
+                ("Max Connections", &stats.max_connections_history),
+                ("Median Connections", &stats.median_connections_history),
+                ("P25 Connections", &stats.p25_connections_history),
+                ("P75 Connections", &stats.p75_connections_history),
+            ]);
+        });
+
+    // Birth / Death Rates window
+    egui::Window::new("Birth / Death Rates")
+        .default_pos([10.0, 635.0])
+        .default_size([300.0, 200.0])
+        .resizable(true)
+        .collapsible(true)
+        .default_open(false)
+        .frame(transparent_frame)
+        .show(ctx, |ui| {
             ui.label("Birth / Death Rate");
             plot_lines(ui, "birth_death_rate", &[
                 ("Births", &stats.birth_rate_history),
