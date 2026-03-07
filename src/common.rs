@@ -60,6 +60,8 @@ pub struct SelectedEntity {
     pub health: f32,
     pub energy: f32,
     pub generation: u32,
+    pub age: f32,
+    pub children_count: u32,
     pub rotation: Quat,
     pub vision_rotation: Quat,
     pub nearest_food_anlge: f32,

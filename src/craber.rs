@@ -23,6 +23,18 @@ pub const CRABER_SPAWN_MULTIPLIER: usize = 1;
 pub const CRABER_MUTATION_CHANCE: f32 = 0.05;
 pub const CRABER_MUTATION_AMOUNT: f32 = 0.5;
 
+/// Decay-based input: 1.0 after reproduction, decays toward 0 over time.
+#[derive(Component)]
+pub struct LastReproducedValue(pub f32);
+
+/// Tracks craber age in seconds since spawn.
+#[derive(Component)]
+pub struct CraberAge(pub f32);
+
+/// Tracks how many children this craber has produced.
+#[derive(Component)]
+pub struct ChildrenCount(pub u32);
+
 /// Accumulator for discrete kick impulses. Each critter has its own.
 #[derive(Component)]
 pub struct KickAccumulator(pub f32);
@@ -86,7 +98,7 @@ pub struct ReproduceCooldown {
 impl Default for ReproduceCooldown {
     fn default() -> Self {
         Self {
-            timer: Timer::from_seconds(1.0, TimerMode::Once),
+            timer: Timer::from_seconds(5.0, TimerMode::Once),
         }
     }
 }
@@ -94,6 +106,19 @@ impl Default for ReproduceCooldown {
 #[derive(Message)]
 pub struct ReproduceEvent {
     pub entity: Entity,
+    pub generation: Generation,
+}
+
+#[derive(Message)]
+pub struct SexualReproduceRequestEvent {
+    pub entity: Entity,
+    pub generation: Generation,
+}
+
+#[derive(Message)]
+pub struct SexualReproduceEvent {
+    pub initiator: Entity,
+    pub partner: Entity,
     pub generation: Generation,
 }
 
@@ -254,6 +279,9 @@ pub fn spawn_craber(
             .insert(event.new_brain.clone())
             .insert(EntityType::Craber)
             .insert(ReproduceCooldown::default())
+            .insert(LastReproducedValue(0.0))
+            .insert(CraberAge(0.0))
+            .insert(ChildrenCount(0))
             .id();
         let vision = Vision {
             radius: 100.0,
@@ -261,6 +289,7 @@ pub fn spawn_craber(
             nearest_food_distance: 0.0,
             nearest_craber_direction: 0.0,
             nearest_craber_distance: 0.0,
+            nearest_craber_genetic_closeness: 0.0,
             nearest_wall_direction: 0.0,
             nearest_wall_distance: 0.0,
             see_food: false,
@@ -351,8 +380,9 @@ pub fn energy_consumption(
     )>,
     time: Res<Time>,
     mut reproduce_events: MessageWriter<ReproduceEvent>,
+    mut sexual_request_events: MessageWriter<SexualReproduceRequestEvent>,
 ) {
-    for (entity, mut health, mut energy, _velocity, generation, _brain, mut cooldown) in
+    for (entity, mut health, mut energy, _velocity, generation, brain, mut cooldown) in
         query.iter_mut()
     {
         let delta_seconds = time.delta_secs();
@@ -364,14 +394,28 @@ pub fn energy_consumption(
         // Tick the reproduction cooldown
         cooldown.timer.tick(time.delta());
         if energy.energy >= CRABER_REQUIRED_REPRODUCE_ENERGY && cooldown.timer.is_finished() {
-            let new_generation = Generation {
-                generation_id: generation.generation_id + 1,
-            };
-            reproduce_events.write(ReproduceEvent {
-                entity,
-                generation: new_generation,
-            });
-            cooldown.timer.reset();
+            // Neural-network gated reproduction: craber must want to reproduce
+            if brain.get_want_to_reproduce() < 1.0 {
+                // Not ready to reproduce yet
+            } else {
+                let new_generation = Generation {
+                    generation_id: generation.generation_id + 1,
+                };
+                if brain.get_want_sexual_reproduction() >= 1.0 {
+                    // Sexual reproduction: request a partner
+                    sexual_request_events.write(SexualReproduceRequestEvent {
+                        entity,
+                        generation: new_generation,
+                    });
+                } else {
+                    // Asexual reproduction
+                    reproduce_events.write(ReproduceEvent {
+                        entity,
+                        generation: new_generation,
+                    });
+                }
+                cooldown.timer.reset();
+            }
         }
         // Handle low energy situations
         if energy.energy <= 0.0 {
@@ -380,20 +424,119 @@ pub fn energy_consumption(
     }
 }
 
+pub fn match_sexual_partners(
+    mut sexual_request_events: MessageReader<SexualReproduceRequestEvent>,
+    craber_query: Query<(&Children, &Brain)>,
+    vision_query: Query<&Vision>,
+    brain_query: Query<&Brain>,
+    mut sexual_reproduce_events: MessageWriter<SexualReproduceEvent>,
+) {
+    for event in sexual_request_events.read() {
+        let Ok((children, _initiator_brain)) = craber_query.get(event.entity) else {
+            continue;
+        };
+        // Find the vision child to get entities in range
+        let mut found_partner = false;
+        for child in children.iter() {
+            let Ok(vision) = vision_query.get(child) else {
+                continue;
+            };
+            for &visible_entity in &vision.entities_in_vision {
+                if visible_entity == event.entity {
+                    continue;
+                }
+                if let Ok(partner_brain) = brain_query.get(visible_entity) {
+                    if partner_brain.get_want_sexual_reproduction() >= 1.0 {
+                        sexual_reproduce_events.write(SexualReproduceEvent {
+                            initiator: event.entity,
+                            partner: visible_entity,
+                            generation: Generation {
+                                generation_id: event.generation.generation_id,
+                            },
+                        });
+                        found_partner = true;
+                        break;
+                    }
+                }
+            }
+            if found_partner {
+                break;
+            }
+        }
+    }
+}
+
+pub fn craber_sexual_reproduce(
+    mut craber_query: Query<(&Transform, &Brain, &mut Energy, &mut LastReproducedValue, &mut ChildrenCount)>,
+    mut sexual_reproduce_events: MessageReader<SexualReproduceEvent>,
+    mut spawn_events: MessageWriter<SpawnEvent>,
+) {
+    for event in sexual_reproduce_events.read() {
+        // Get partner brain first (immutable borrow)
+        let partner_brain = if let Ok((_, brain, _, _, _)) = craber_query.get(event.partner) {
+            brain.clone()
+        } else {
+            continue;
+        };
+
+        // Now get initiator (mutable borrow)
+        let Ok((transform, brain, mut energy, mut last_reproduced, mut children_count)) = craber_query.get_mut(event.initiator) else {
+            continue;
+        };
+        if energy.energy < CRABER_REPRODUCE_ENERGY {
+            continue;
+        }
+        energy.energy -= CRABER_REPRODUCE_ENERGY;
+        last_reproduced.0 = 1.0;
+        children_count.0 += 1;
+
+        let child_brain = brain.crossover_brain(
+            &partner_brain,
+            CRABER_MUTATION_CHANCE,
+            CRABER_MUTATION_AMOUNT,
+            CRABER_MUTATION_CHANCE,
+        );
+
+        // Spawn offspring between the two parents
+        let parent_angle = transform.rotation.to_axis_angle().1;
+        let position_offset = Vec2::new(parent_angle.cos(), parent_angle.sin()) * CRABER_SIZE * 5.0;
+        let position = transform.translation + position_offset.extend(0.0);
+        let rotation = Quat::from_rotation_z(parent_angle + std::f32::consts::PI);
+
+        spawn_events.write(SpawnEvent {
+            position,
+            new_brain: child_brain,
+            generation: event.generation.generation_id,
+            roation: rotation,
+            craber: Craber {},
+            health: Health {
+                max_health: 100.0,
+                health: 50.0,
+            },
+            energy: Energy {
+                max_energy: 100.0,
+                energy: CRABER_REPRODUCE_ENERGY,
+            },
+        });
+    }
+}
+
 // TODO: Make reproduction for plants/food? Would need a separate health/energy component
 pub fn craber_reproduce(
-    mut craber_query: Query<(&Transform, &Brain, &mut Energy)>,
+    mut craber_query: Query<(&Transform, &Brain, &mut Energy, &mut LastReproducedValue, &mut ChildrenCount)>,
     mut reproduce_events: MessageReader<ReproduceEvent>,
     mut spawn_events: MessageWriter<SpawnEvent>,
 ) {
     for event in reproduce_events.read() {
-        if let Ok((transform, brain, mut energy)) = craber_query.get_mut(event.entity) {
+        if let Ok((transform, brain, mut energy, mut last_reproduced, mut children_count)) = craber_query.get_mut(event.entity) {
             // Guard: ensure parent still has enough energy (may have been spent since event was sent)
             if energy.energy < CRABER_REPRODUCE_ENERGY {
                 continue;
             }
             // Deduct energy directly to prevent multi-frame burst
             energy.energy -= CRABER_REPRODUCE_ENERGY;
+            last_reproduced.0 = 1.0;
+            children_count.0 += 1;
 
             // Position offset from parent to the back, first find the angle of the parent
             let parent_angle = transform.rotation.to_axis_angle().1;

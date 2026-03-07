@@ -62,6 +62,8 @@ fn main() {
         .add_message::<DespawnEvent>()
         .add_message::<SpawnEvent>()
         .add_message::<ReproduceEvent>()
+        .add_message::<SexualReproduceRequestEvent>()
+        .add_message::<SexualReproduceEvent>()
         .add_message::<VisionEvent>()
         .add_message::<LoseEnergyEvent>()
         .add_message::<LoseHealthEvent>()
@@ -88,7 +90,9 @@ fn main() {
         .add_systems(Update, craber_attack_lose_health_add_energy)
         .add_systems(Update, do_despawning)
         // Ordered chains: reproduction pipeline and death pipeline
-        .add_systems(Update, energy_consumption.before(craber_reproduce))
+        .add_systems(Update, energy_consumption.before(match_sexual_partners))
+        .add_systems(Update, match_sexual_partners.before(craber_sexual_reproduce))
+        .add_systems(Update, craber_sexual_reproduce.before(craber_reproduce))
         .add_systems(Update, craber_reproduce.before(spawn_craber))
         .add_systems(Update, spawn_craber)
         .add_systems(Update, despawn_dead_crabers.before(craber_despawner))
@@ -228,6 +232,8 @@ fn egui_ui(
                 ui.label(format!("Health: {:.2}", selected.health));
                 ui.label(format!("Energy: {:.2}", selected.energy));
                 ui.label(format!("Generation: {}", selected.generation));
+                ui.label(format!("Age: {:.1}s", selected.age));
+                ui.label(format!("Children: {}", selected.children_count));
                 ui.label(format!(
                     "Nearest food angle: {:.2}",
                     selected.nearest_food_anlge
@@ -322,18 +328,20 @@ fn window_to_world(
 
 fn update_selected_entity_info(
     mut selected: ResMut<SelectedEntity>,
-    craber_query: Query<(&Transform, &Children, &Generation, &Brain, &Health, &Energy)>,
+    craber_query: Query<(&Transform, &Children, &Generation, &Brain, &Health, &Energy, &CraberAge, &ChildrenCount)>,
     vision_query: Query<(&Vision, &Transform, Entity, &ChildOf)>,
     food_query: Query<&Food>,
 ) {
     if let Some(entity) = selected.entity {
         // Check if the selected entity is a Craber
-        if let Ok((craber_transform, craber_children, craber_generation, brain, health, energy)) =
+        if let Ok((craber_transform, craber_children, craber_generation, brain, health, energy, age, children_count)) =
             craber_query.get(entity)
         {
             selected.health = health.health;
             selected.energy = energy.energy;
             selected.generation = craber_generation.generation_id;
+            selected.age = age.0;
+            selected.children_count = children_count.0;
             selected.rotation = craber_transform.rotation;
             selected.brain_info = brain.get_brain_info();
             for child in craber_children.iter() {
@@ -593,6 +601,7 @@ fn apply_kick(
 pub fn vision_update(
     mut query: Query<(&mut Vision, &GlobalTransform, &Collider, &ChildOf)>,
     mut vision_events: MessageReader<VisionEvent>,
+    brain_query: Query<&Brain>,
 ) {
     for vision_event in vision_events.read() {
         match vision_event.event_type {
@@ -678,6 +687,15 @@ pub fn vision_update(
                         Vec3::new(closest_point.x, closest_point.y, 0.),
                     );
                     vision.see_craber = true;
+
+                    // Compute genetic closeness between parent craber and seen craber
+                    let parent_entity = _parent.parent();
+                    if let (Ok(parent_brain), Ok(seen_brain)) =
+                        (brain_query.get(parent_entity), brain_query.get(vision_event.entity))
+                    {
+                        vision.nearest_craber_genetic_closeness =
+                            parent_brain.genetic_closeness(seen_brain);
+                    }
                 }
             }
             VisionEventType::Wall => {
@@ -732,13 +750,17 @@ pub fn brain_update(
         &mut Craber,
         &mut BrainTickAccumulator,
         &Children,
+        &mut LastReproducedValue,
+        &Health,
+        &Energy,
+        &mut CraberAge,
     )>,
     mut vision_query: Query<(&mut Vision, &Transform)>,
     time: Res<Time>,
     mut lose_energy_events: MessageWriter<LoseEnergyEvent>,
 ) {
     let dt = time.delta_secs();
-    for (entity, mut brain, _craber, mut accumulator, children) in query.iter_mut() {
+    for (entity, mut brain, _craber, mut accumulator, children, mut last_reproduced, health, energy, mut age) in query.iter_mut() {
         let modify_output = brain.get_modify_brain_interval().clamp(0.0, 1.0);
         let effective_rate =
             BRAIN_TICK_MIN_RATE + modify_output * (BRAIN_TICK_MAX_RATE - BRAIN_TICK_MIN_RATE);
@@ -777,6 +799,10 @@ pub fn brain_update(
                 NeuronType::NearestCraberDistance,
                 vision.nearest_craber_distance,
             );
+            brain.update_input(
+                NeuronType::NearestCraberGeneticCloseness,
+                vision.nearest_craber_genetic_closeness,
+            );
             vision.craber_seen_timer = VISION_UPDATE_RATE;
             vision.no_see_craber();
         } else {
@@ -784,6 +810,7 @@ pub fn brain_update(
             if vision.craber_seen_timer <= 0.0 {
                 brain.update_input(NeuronType::NearestCraberAngle, 0.0);
                 brain.update_input(NeuronType::NearestCraberDistance, 0.0);
+                brain.update_input(NeuronType::NearestCraberGeneticCloseness, 0.0);
             }
         }
         if vision.see_wall {
@@ -804,6 +831,18 @@ pub fn brain_update(
                 brain.update_input(NeuronType::NearestWallDistance, 0.0);
             }
         }
+        // Tick age
+        age.0 += dt;
+
+        // Feed health/energy/age inputs (normalized 0-1)
+        brain.update_input(NeuronType::CraberHealth, health.health / health.max_health);
+        brain.update_input(NeuronType::CraberEnergy, energy.energy / energy.max_energy);
+        brain.update_input(NeuronType::CraberAge, 1.0 - (-0.01 * age.0).exp());
+
+        // Decay and feed LastReproduced input
+        last_reproduced.0 *= 1.0 - 0.5 * dt;
+        brain.update_input(NeuronType::LastReproduced, last_reproduced.0);
+
         brain.feed_forward();
 
         lose_energy_events.write(LoseEnergyEvent {
