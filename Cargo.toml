@@ -18,5 +18,12 @@ avian2d = {version = "0.5", features = ["parallel"]}
 avian2d = {version = "0.5"}
 getrandom = {version = "0.4", features = ["wasm_js"]}
 
+[profile.web]
+inherits = "release"
+opt-level = 3
+lto = true
+codegen-units = 1
+strip = true
+
 [target.wasm32-unknown-unknown]
 runner = "wasm-server-runner"
